@@ -1,0 +1,63 @@
+version: "3.8"
+
+services:
+  mongodb:
+    image: docker.io/mongo:latest
+    container_name: tvet_mongodb
+    ports:
+      - "27017:27017"
+    volumes:
+      - ./mongodb_data:/data/db:Z
+    restart: always
+    networks:
+      - tvet_net
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Containerfile.backend
+    container_name: tvet_backend
+    ports:
+      - "5000:5000"
+    env_file:
+      - ./backend/.env
+    environment:
+      - MONGO_URI=mongodb://mongodb:27017/ikmb-dashboard
+      - ML_API_URL=http://ml-api:8000
+    depends_on:
+      - mongodb
+    command: sh -c "sleep 5 && npm run start:prod"
+    restart: always
+    networks:
+      - tvet_net
+
+  ml-api:
+    build:
+      context: ./ML
+      dockerfile: Containerfile
+    container_name: tvet_ml_api
+    ports:
+      - "8000:8000"
+    restart: always
+    networks:
+      - tvet_net
+
+  frontend:
+    build:
+      context: .
+      dockerfile: Containerfile.frontend
+    container_name: tvet_frontend
+    ports:
+      - "8080:3000" # Maps host 8080 to Next.js internal 3000
+    environment:
+      - BACKEND_URL=http://backend:5000 # Allows Server Components to fetch data
+      - NODE_ENV=production
+    depends_on:
+      - backend
+    restart: always
+    networks:
+      - tvet_net
+
+networks:
+  tvet_net:
+    driver: bridge
