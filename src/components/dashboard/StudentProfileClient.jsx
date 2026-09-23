@@ -1,7 +1,9 @@
 "use client";
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { getClientToken } from "@/lib/client-auth";
+import GenerateReportModal from "@/components/GenerateReportModal";
+import ReportFormModal from "@/components/ReportFormModal";
+
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -80,12 +82,13 @@ export default function StudentProfileClient({ studentId }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [activeTab, setActiveTab] = useState("personal");
+  const [isGenerateModalOpen, setIsGenerateModalOpen] = useState(false);
+  const [isReferralModalOpen, setIsReferralModalOpen] = useState(false);
+  const [referralType, setReferralType] = useState("kaunseling");
 
   useEffect(() => {
     if (!studentId) return;
-    const t = getClientToken();
-    if (!t) { router.push("/"); return; }
-    fetch(`/api/students/${studentId}/skill-gap`, { headers: { Authorization: `Bearer ${t}` } })
+    fetch(`/api/students/${studentId}/skill-gap`)
       .then((res) => res.json())
       .then((data) => setSkillGap(data))
       .catch(() => setSkillGap(null))
@@ -193,30 +196,6 @@ export default function StudentProfileClient({ studentId }) {
 
   const handlePrint = () => window.print();
 
-  const handleDownload = () => {
-    const exportData = {
-      studentDetails: student,
-      academicHistory: student.academicHistory || [],
-      aiInsight: insight.message || "Tiada insight",
-      employabilityScore: employabilityScore,
-      ploScores: radarLabels.map((label, i) => ({
-        plo: label,
-        score: radarCurrent[i],
-        target: radarTarget[i],
-      })),
-    };
-    const jsonString = JSON.stringify(exportData, null, 2);
-    const blob = new Blob([jsonString], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `Profil_Pelajar_${student.id || "unknown"}.json`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
-  };
-
   return (
     <div className="min-h-screen bg-[#EEF3FB] p-6 font-sans">
       <div className="mb-6 flex items-center justify-between">
@@ -282,21 +261,18 @@ export default function StudentProfileClient({ studentId }) {
                 </div>
               </div>
 
-              <div className="mt-6 grid grid-cols-3 gap-2">
-                <button className="bg-[#1251AA] text-white py-2 rounded-lg text-xs font-medium hover:bg-[#0C2461] flex items-center justify-center gap-1">
-                  <i className="ph-bold ph-pencil-simple"></i> Edit
+              <div className="mt-6 grid grid-cols-2 gap-2">
+                <button
+                  onClick={() => setIsGenerateModalOpen(true)}
+                  className="bg-[#1251AA] text-white py-2 rounded-lg text-xs font-medium hover:bg-[#0C2461] flex items-center justify-center gap-1"
+                >
+                  <i className="ph-bold ph-file-text"></i> Jana Laporan
                 </button>
                 <button
                   onClick={handlePrint}
                   className="bg-gray-100 text-[#5A6A85] py-2 rounded-lg text-xs font-medium hover:bg-gray-200 flex items-center justify-center transition-colors"
                 >
                   <i className="ph-bold ph-printer"></i>
-                </button>
-                <button
-                  onClick={handleDownload}
-                  className="bg-gray-100 text-[#5A6A85] py-2 rounded-lg text-xs font-medium hover:bg-gray-200 flex items-center justify-center transition-colors"
-                >
-                  <i className="ph-bold ph-download-simple"></i>
                 </button>
               </div>
             </div>
@@ -484,7 +460,10 @@ export default function StudentProfileClient({ studentId }) {
                         sesi perjumpaan segera.
                       </p>
                       <button
-                        onClick={() => alert("Temujanji berjaya dihantar!")}
+                        onClick={() => {
+                          setReferralType("kaunseling");
+                          setIsReferralModalOpen(true);
+                        }}
                         className="w-full text-xs font-bold text-red-600 border border-red-200 bg-white py-2 rounded-lg hover:bg-red-50 transition"
                       >
                         Set Temujanji
@@ -502,7 +481,10 @@ export default function StudentProfileClient({ studentId }) {
                         dalam kelas bimbingan tambahan.
                       </p>
                       <button
-                        onClick={() => alert("Pendaftaran klinik berjaya!")}
+                        onClick={() => {
+                          setReferralType("klinik");
+                          setIsReferralModalOpen(true);
+                        }}
                         className="w-full text-xs font-bold text-orange-600 border border-orange-200 bg-white py-2 rounded-lg hover:bg-orange-50 transition"
                       >
                         Daftar Klinik
@@ -520,7 +502,10 @@ export default function StudentProfileClient({ studentId }) {
                         kepimpinan.
                       </p>
                       <button
-                        onClick={() => alert("Senarai program dipaparkan!")}
+                        onClick={() => {
+                          setReferralType("softskills");
+                          setIsReferralModalOpen(true);
+                        }}
                         className="w-full text-xs font-bold text-blue-600 border border-blue-200 bg-white py-2 rounded-lg hover:bg-blue-50 transition"
                       >
                         Lihat Program
@@ -533,6 +518,20 @@ export default function StudentProfileClient({ studentId }) {
           </div>
         </div>
       </div>
+
+      <GenerateReportModal
+        isOpen={isGenerateModalOpen}
+        onClose={() => setIsGenerateModalOpen(false)}
+        student={student}
+        skillGap={skillGap}
+      />
+
+      <ReportFormModal
+        isOpen={isReferralModalOpen}
+        onClose={() => setIsReferralModalOpen(false)}
+        student={student}
+        interventionType={referralType}
+      />
     </div>
   );
 }

@@ -19,7 +19,7 @@ export const verifyToken = (req, res, next) => {
   return next();
 };
 
-// NEW: Middleware to restrict access to Admins only
+// Restrict access to Admins only
 export const requireAdmin = (req, res, next) => {
   if (req.user.role !== 'admin') {
     return res.status(403).json({ error: 'Akses ditolak. Admin sahaja.' });
@@ -27,10 +27,19 @@ export const requireAdmin = (req, res, next) => {
   next();
 };
 
-// NEW: Middleware to ensure the user owns the student record (or is an admin)
+// Restrict access to staff (admin or counselor)
+export const requireStaff = (req, res, next) => {
+  if (req.user.role !== 'admin' && req.user.role !== 'counselor') {
+    return res.status(403).json({ error: 'Akses ditolak. Kakitangan sahaja.' });
+  }
+  next();
+};
+
+// Ensure the user owns the student record (or is staff)
 export const requireOwnershipOrAdmin = (req, res, next) => {
   const { studentId } = req.params;
-  if (req.user.role !== 'admin' && req.user.studentId !== studentId) {
+  const isStaff = req.user.role === 'admin' || req.user.role === 'counselor';
+  if (!isStaff && req.user.studentId !== studentId) {
     return res.status(403).json({ message: 'Akses ditolak. Anda tidak mempunyai kebenaran untuk melihat data pelajar ini.' });
   }
   next();

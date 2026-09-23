@@ -71,8 +71,8 @@ const seedDatabase = async () => {
       );
     }
 
-    // Tambah akaun Admin Default
-    console.log("👑 Menambah akaun admin...");
+    // Tambah akaun Admin, Counselor & User Default
+    console.log("👑 Menambah akaun admin, counselor & user...");
     await User.findOneAndUpdate(
       { email: "admin@ikmb.edu.my" },
       {
@@ -80,6 +80,19 @@ const seedDatabase = async () => {
           password: defaultPassword,
           role: "admin",
           displayName: "Admin IKMB",
+          studentId: null,
+        },
+      },
+      { upsert: true, returnDocument: 'after' },
+    );
+
+    await User.findOneAndUpdate(
+      { email: "counselor@ikmb.edu.my" },
+      {
+        $set: {
+          password: defaultPassword,
+          role: "counselor",
+          displayName: "Kaunselor IKMB",
           studentId: null,
         },
       },

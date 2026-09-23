@@ -8,6 +8,8 @@ import path from "path";
 import { fileURLToPath } from "url";
 import authRouter from "./auth.js";
 import itemsRouter from "./items.js";
+import reportsRouter from "./reports.js";
+import studentReportsRouter from "./studentReports.js";
 
 dotenv.config();
 
@@ -42,7 +44,7 @@ const swaggerOptions = {
       },
     },
   },
-  apis: ["./auth.js", "./items.js"],
+  apis: ["./auth.js", "./items.js", "./reports.js", "./studentReports.js"],
 };
 
 const swaggerDocs = swaggerJsdoc(swaggerOptions);
@@ -71,6 +73,8 @@ app.get("/api/health", (_req, res) => {
 
 app.use("/api/auth", authRouter);
 app.use("/api", itemsRouter);
+app.use("/api", reportsRouter);
+app.use("/api", studentReportsRouter);
 
 if (process.env.NODE_ENV !== "test") {
   const port = Number(process.env.PORT) || 5000;

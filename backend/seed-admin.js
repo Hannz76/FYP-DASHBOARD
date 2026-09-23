@@ -14,11 +14,12 @@ const seedAdminOnly = async () => {
     const salt = await bcrypt.genSalt(10);
     const defaultPassword = await bcrypt.hash("password123", salt);
 
-    console.log("👑 Menambah akaun admin & user demo...");
+    console.log("👑 Menambah akaun admin, counselor & user demo...");
     await User.findOneAndUpdate({ email: "admin@ikmb.edu.my" }, { $set: { password: defaultPassword, role: "admin", displayName: "Admin IKMB", studentId: null } }, { upsert: true, new: true });
+    await User.findOneAndUpdate({ email: "counselor@ikmb.edu.my" }, { $set: { password: defaultPassword, role: "counselor", displayName: "Kaunselor IKMB", studentId: null } }, { upsert: true, new: true });
     await User.findOneAndUpdate({ email: "user@ikmb.edu.my" }, { $set: { password: defaultPassword, role: "user", displayName: "User IKMB", studentId: null } }, { upsert: true, new: true });
 
-    console.log("✨ SELESAI! Akaun admin sahaja dijana.");
+    console.log("✨ SELESAI! Akaun demo dijana.");
     process.exit();
   } catch (error) {
     console.error("❌ Ralat:", error);

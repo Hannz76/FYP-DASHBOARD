@@ -40,15 +40,18 @@ export async function loginAction(prevState, formData) {
       path: '/'
     });
     cookieStore.set('ikmbToken', data.token, {
-      httpOnly: false, 
-      secure: process.env.NODE_ENV === 'production', 
-      maxAge: 86400, 
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      maxAge: 86400,
       path: '/'
     });
   }
 
-  const dashboardUrl = data.user.role === 'admin' ? '/staff-dashboard' : '/student-dashboard';
-  
+  const dashboardUrl =
+    data.user.role === 'admin' || data.user.role === 'counselor'
+      ? '/staff-dashboard'
+      : '/student-dashboard';
+
   // 3. PENTING: redirect() WAJIB berada di LUAR try/catch!
   // Jika ia di dalam catch, Next.js akan menyangka ia adalah ralat sistem.
   redirect(dashboardUrl);

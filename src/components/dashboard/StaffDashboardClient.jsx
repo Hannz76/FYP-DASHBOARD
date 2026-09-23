@@ -2,7 +2,7 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { logoutAction } from "@/app/actions";
-import { getClientUser, getClientToken } from "@/lib/client-auth";
+import { getClientUser } from "@/lib/client-auth";
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -17,6 +17,7 @@ import Sidebar from "../Sidebar";
 import KpiCard from "../KpiCard";
 import StudentModal from "../StudentModal";
 import StudentListGrid from "../StudentListGrid";
+import CounselorDashboardClient from "./CounselorDashboardClient";
 import { calculateEmployability, calculateTopPerformerScore } from "@/lib/heuristics";
 
 ChartJS.register(
@@ -83,16 +84,11 @@ export default function StaffDashboardClient() {
     const u = getClientUser();
     setUser(u);
 
-    const t = getClientToken();
-    if (t) {
-      fetch("/api/students", { headers: { Authorization: `Bearer ${t}` } })
-        .then((res) => res.json())
-        .then((data) => setStudents(data))
-        .catch((err) => console.error("Fetch students error:", err))
-        .finally(() => setIsLoading(false));
-    } else {
-      setIsLoading(false);
-    }
+    fetch("/api/students")
+      .then((res) => res.json())
+      .then((data) => setStudents(data))
+      .catch((err) => console.error("Fetch students error:", err))
+      .finally(() => setIsLoading(false));
   }, []);
 
   const handleLogout = async (e) => {
@@ -230,8 +226,6 @@ const getEmployability = (s) => calculateEmployability(s.cgpa, s.attendance);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    const t = getClientToken();
-    if (!t) { router.push("/"); return; }
     const method = editingStudent ? "PUT" : "POST";
     const url = editingStudent
       ? `/api/students/${editingStudent}`
@@ -240,7 +234,6 @@ const getEmployability = (s) => calculateEmployability(s.cgpa, s.attendance);
       method,
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${t}`,
       },
       body: JSON.stringify(formData),
     });
@@ -252,24 +245,18 @@ const getEmployability = (s) => calculateEmployability(s.cgpa, s.attendance);
 
   const handleDelete = async (id) => {
     if (window.confirm("Padam data pelajar ini?")) {
-      const t = getClientToken();
-      if (!t) { router.push("/"); return; }
       const response = await fetch(`/api/students/${id}`, {
         method: "DELETE",
-        headers: { Authorization: `Bearer ${t}` },
       });
       if (response.ok) setStudents(students.filter((s) => s.id !== id));
     }
   };
 
   const runManualPrediction = async () => {
-    const t = getClientToken();
-    if (!t) { router.push("/"); return; }
     const response = await fetch("/api/predict/manual", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${t}`,
       },
       body: JSON.stringify(manualPredict),
     });
@@ -281,14 +268,11 @@ const getEmployability = (s) => calculateEmployability(s.cgpa, s.attendance);
     setIsUploading(true);
     setUploadMsg(null);
     try {
-      const t = getClientToken();
-      if (!t) { router.push("/"); return; }
       const formData = new FormData();
       formData.append("file", mdbFile);
 
       const response = await fetch("/api/data/upload-mdb", {
         method: "POST",
-        headers: { Authorization: `Bearer ${t}` },
         body: formData,
       });
 
@@ -307,14 +291,19 @@ const getEmployability = (s) => calculateEmployability(s.cgpa, s.attendance);
     }
   };
 
-  const navItems = [
+  const baseNavItems = [
     { id: "overview", icon: "ph-squares-four", label: "Dashboard Overview" },
     { id: "prediction", icon: "ph-magic-wand", label: "AI Prediction" },
     { id: "skills", icon: "ph-chart-bar", label: "Skills Gap Analysis" },
     { id: "pathways", icon: "ph-path", label: "Learning Pathways" },
     { id: "management", icon: "ph-users-three", label: "Student Management" },
+    { id: "counselor", icon: "ph-heartbeat", label: "Kaunselor" },
     { id: "data", icon: "ph-database", label: "Pengurusan Data" },
   ];
+
+  const navItems = user?.role === "counselor"
+    ? baseNavItems.filter((item) => !["data"].includes(item.id))
+    : baseNavItems;
 
   if (isLoading || !user) {
     return <div className="h-screen flex items-center justify-center text-slate-500">Memuatkan Dashboard...</div>;
@@ -677,6 +666,8 @@ const getEmployability = (s) => calculateEmployability(s.cgpa, s.attendance);
               }}
             />
           )}
+
+          {activeTab === "counselor" && <CounselorDashboardClient />}
 
           {activeTab === "data" && (
             <div className="space-y-6 max-w-3xl">

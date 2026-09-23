@@ -2,7 +2,7 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { logoutAction } from "@/app/actions";
-import { getClientUser, getClientToken } from "@/lib/client-auth";
+import { getClientUser } from "@/lib/client-auth";
 import {
   Chart as ChartJS,
   RadialLinearScale,
@@ -15,6 +15,7 @@ import {
 import { Radar } from "react-chartjs-2";
 import Sidebar from "../Sidebar";
 import JobCard from "../JobCard";
+import StudentReportsTab from "./StudentReportsTab";
 import { calculateEmployability } from "@/lib/heuristics";
 
 ChartJS.register(
@@ -185,24 +186,19 @@ export default function StudentDashboardClient() {
     const u = getClientUser();
     setUser(u);
 
-    const t = getClientToken();
-    if (t) {
-      fetch("/api/students", { headers: { Authorization: `Bearer ${t}` } })
-        .then((res) => res.json())
-        .then((data) => {
-          const isRestrictedUser = u?.role === "user" && u?.studentId;
-          const visibleStudents = isRestrictedUser
-            ? data.filter((s) => s.id === u.studentId)
-            : data;
-          setStudents(visibleStudents);
-          if (visibleStudents.length > 0)
-            setSelectedStudentId(visibleStudents[0].id);
-        })
-        .catch((err) => console.error("Fetch students error:", err))
-        .finally(() => setIsLoading(false));
-    } else {
-      setIsLoading(false);
-    }
+    fetch("/api/students")
+      .then((res) => res.json())
+      .then((data) => {
+        const isRestrictedUser = u?.role === "user" && u?.studentId;
+        const visibleStudents = isRestrictedUser
+          ? data.filter((s) => s.id === u.studentId)
+          : data;
+        setStudents(visibleStudents);
+        if (visibleStudents.length > 0)
+          setSelectedStudentId(visibleStudents[0].id);
+      })
+      .catch((err) => console.error("Fetch students error:", err))
+      .finally(() => setIsLoading(false));
   }, []);
 
   const isRestrictedUser = user?.role === "user" && user?.studentId;
@@ -217,17 +213,11 @@ export default function StudentDashboardClient() {
     if (!selectedStudentId) return;
     setIsLoading(true);
     const loadStudentData = async () => {
-      const t = getClientToken();
-      if (!t) { router.push("/"); return; }
       try {
-        const resGap = await fetch(`/api/students/${selectedStudentId}/skill-gap`, {
-          headers: { Authorization: `Bearer ${t}` },
-        });
+        const resGap = await fetch(`/api/students/${selectedStudentId}/skill-gap`);
         setSkillGap(await resGap.json());
 
-        const resStudent = await fetch(`/api/students/${selectedStudentId}`, {
-          headers: { Authorization: `Bearer ${t}` },
-        });
+        const resStudent = await fetch(`/api/students/${selectedStudentId}`);
         const studentData = await resStudent.json();
         setCustomCerts(studentData.uploadedCertificates || []);
       } catch (e) {
@@ -330,15 +320,10 @@ export default function StudentDashboardClient() {
       formData.append("file", file);
 
       try {
-        const t = getClientToken();
-        if (!t) { router.push("/"); return; }
         const res = await fetch(
           `/api/students/${selectedStudentId}/profile-image`,
           {
             method: "POST",
-            headers: {
-              Authorization: `Bearer ${t}`,
-            },
             body: formData,
           },
         );
@@ -381,15 +366,10 @@ export default function StudentDashboardClient() {
     formData.append("file", selectedFile);
 
     try {
-      const t = getClientToken();
-      if (!t) { router.push("/"); return; }
       const res = await fetch(
         `/api/students/${selectedStudentId}/certificates`,
         {
           method: "POST",
-          headers: {
-            Authorization: `Bearer ${t}`,
-          },
           body: formData,
         },
       );
@@ -410,13 +390,10 @@ export default function StudentDashboardClient() {
 
   const handleDeleteCertificate = async (certId) => {
     try {
-      const t = getClientToken();
-      if (!t) { router.push("/"); return; }
       const res = await fetch(
         `/api/students/${selectedStudentId}/certificates/${certId}`,
         {
           method: "DELETE",
-          headers: { Authorization: `Bearer ${t}` },
         },
       );
 
@@ -432,6 +409,7 @@ export default function StudentDashboardClient() {
   const navItems = [
     { id: "dashboard", icon: "ph-user-circle", label: "Profil & Prestasi" },
     { id: "profile", icon: "ph-pencil-line", label: "Kemaskini Sijil Saya" },
+    { id: "reports", icon: "ph-file-text", label: "Laporan Saya" },
     { id: "career", icon: "ph-briefcase", label: "Padanan Kerjaya (AI)" },
     { id: "courses", icon: "ph-certificate", label: "Kursus Cadangan" },
   ];
@@ -839,7 +817,10 @@ export default function StudentDashboardClient() {
             </div>
           )}
 
-          {/* TAB 3: CAREER */}
+          {/* TAB 3: REPORTS */}
+          {activeTab === "reports" && <StudentReportsTab />}
+
+          {/* TAB 4: CAREER */}
           {activeTab === "career" && (
             <div className="animate-[fadeIn_0.3s_ease-in-out]">
               <header className="mb-8">
@@ -862,7 +843,7 @@ export default function StudentDashboardClient() {
             </div>
           )}
 
-          {/* TAB 4: COURSES */}
+          {/* TAB 5: COURSES */}
           {activeTab === "courses" && (
             <div className="animate-[fadeIn_0.3s_ease-in-out]">
               <header className="mb-8">

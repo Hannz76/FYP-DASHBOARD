@@ -19,7 +19,9 @@ export function middleware(request) {
   if (isLoginPage) {
     if (user) {
       // Jika sudah login, halau ke dashboard masing-masing
-      const dashboardUrl = user.role === 'admin' ? '/staff-dashboard' : '/student-dashboard';
+      const dashboardUrl = user.role === 'admin' || user.role === 'counselor'
+        ? '/staff-dashboard'
+        : '/student-dashboard';
       return NextResponse.redirect(new URL(dashboardUrl, request.url));
     }
     return NextResponse.next();
@@ -31,8 +33,10 @@ export function middleware(request) {
   }
 
   // 4. Role-Based Access Control
+  const isStaff = user.role === 'admin' || user.role === 'counselor';
+
   if (pathname.startsWith('/staff-dashboard') || pathname.startsWith('/student-profile')) {
-    if (user.role !== 'admin') {
+    if (!isStaff) {
       return NextResponse.redirect(new URL('/student-dashboard', request.url));
     }
   }

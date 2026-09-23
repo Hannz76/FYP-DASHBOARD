@@ -12,12 +12,3 @@ export function getClientUser() {
     return null;
   }
 }
-
-export function getClientToken() {
-  if (typeof window === "undefined") return null;
-  const tokenCookie = document.cookie
-    .split("; ")
-    .find((row) => row.startsWith("ikmbToken="));
-  if (!tokenCookie) return null;
-  return tokenCookie.split("=")[1];
-}
