@@ -68,3 +68,4 @@ backend/uploads/
 
 # Next.js build output
 .next/
+start-local-dev.sh
