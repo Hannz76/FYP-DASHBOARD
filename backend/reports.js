@@ -131,7 +131,7 @@ router.get("/reports/mine", verifyToken, async (req, res) => {
       studentId: req.user.studentId,
       status: { $in: ["accepted", "scheduled"] },
     })
-      .select("interventionType scheduledDate status fileName filePath")
+      .select("interventionType scheduledDate status priority reason counselorId counselorNotes adminEmail fileName filePath studentId course")
       .sort({ scheduledDate: 1 });
     res.json(reports);
   } catch (error) {

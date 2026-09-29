@@ -15,7 +15,8 @@ import {
 import { Radar } from "react-chartjs-2";
 import Sidebar from "../Sidebar";
 import JobCard from "../JobCard";
-import StudentReportsTab from "./StudentReportsTab";
+import MergedLaporanTab from "./MergedLaporanTab";
+import StudentDetailModal from "../StudentDetailModal";
 import { calculateEmployability } from "@/lib/heuristics";
 
 ChartJS.register(
@@ -182,6 +183,7 @@ export default function StudentDashboardClient() {
   const [activeTab, setActiveTab] = useState("dashboard");
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [appointments, setAppointments] = useState([]);
+  const [selectedAppointment, setSelectedAppointment] = useState(null);
 
   useEffect(() => {
     const u = getClientUser();
@@ -530,7 +532,15 @@ export default function StudentDashboardClient() {
                               </a>
                             )}
                           </div>
-                          <i className="ph-fill ph-clock text-purple-400 text-xl"></i>
+                          <div className="flex items-center gap-2 shrink-0">
+                            <button
+                              onClick={() => setSelectedAppointment(a)}
+                              className="px-3 py-1.5 rounded-lg text-xs font-medium bg-purple-600 text-white hover:bg-purple-700"
+                            >
+                              Lihat Butiran
+                            </button>
+                            <i className="ph-fill ph-clock text-purple-400 text-xl"></i>
+                          </div>
                         </div>
                       ))}
                   </div>
@@ -873,8 +883,8 @@ export default function StudentDashboardClient() {
             </div>
           )}
 
-          {/* TAB 3: REPORTS */}
-          {activeTab === "reports" && <StudentReportsTab />}
+          {/* TAB 3: REPORTS (merged reports + appointments) */}
+          {activeTab === "reports" && <MergedLaporanTab />}
 
           {/* TAB 4: CAREER */}
           {activeTab === "career" && (
@@ -971,6 +981,14 @@ export default function StudentDashboardClient() {
           )}
         </div>
       </main>
+
+      {selectedAppointment && (
+        <StudentDetailModal
+          kind="appointment"
+          appointment={selectedAppointment}
+          onClose={() => setSelectedAppointment(null)}
+        />
+      )}
     </div>
   );
 }
