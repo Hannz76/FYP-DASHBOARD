@@ -181,10 +181,16 @@ export default function StudentDashboardClient() {
 
   const [activeTab, setActiveTab] = useState("dashboard");
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [appointments, setAppointments] = useState([]);
 
   useEffect(() => {
     const u = getClientUser();
     setUser(u);
+
+    fetch("/api/reports/mine")
+      .then((res) => (res.ok ? res.json() : []))
+      .then((data) => setAppointments(Array.isArray(data) ? data : []))
+      .catch(() => setAppointments([]));
 
     fetch("/api/students")
       .then((res) => res.json())
@@ -480,6 +486,56 @@ export default function StudentDashboardClient() {
                   </span>
                 )}
               </header>
+
+              {appointments.filter((a) => a.scheduledDate).length > 0 && (
+                <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm mb-8">
+                  <h3 className="font-bold text-lg flex items-center gap-2 mb-4">
+                    <i className="ph-fill ph-calendar-check text-purple-600"></i>
+                    Temujanji Akan Datang
+                  </h3>
+                  <div className="space-y-3">
+                    {appointments
+                      .filter((a) => a.scheduledDate)
+                      .map((a) => (
+                        <div
+                          key={a._id}
+                          className="flex items-center justify-between bg-purple-50 border border-purple-100 rounded-xl px-4 py-3"
+                        >
+                          <div>
+                            <p className="font-medium text-slate-900 text-sm">
+                              {a.interventionType === "kaunseling"
+                                ? "Kaunseling Kehadiran"
+                                : a.interventionType === "klinik"
+                                ? "Klinik Akademik"
+                                : "Pembangunan Soft Skills"}
+                            </p>
+                            <p className="text-xs text-slate-500">
+                              {new Date(a.scheduledDate).toLocaleString("ms-MY", {
+                                day: "numeric",
+                                month: "long",
+                                year: "numeric",
+                                hour: "2-digit",
+                                minute: "2-digit",
+                              })}
+                            </p>
+                            {a.filePath && (
+                              <a
+                                href={a.filePath}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-xs text-purple-700 font-medium hover:underline flex items-center gap-1 mt-1"
+                              >
+                                <i className="ph-fill ph-paperclip"></i>
+                                {a.fileName || "Muat Turun Lampiran"}
+                              </a>
+                            )}
+                          </div>
+                          <i className="ph-fill ph-clock text-purple-400 text-xl"></i>
+                        </div>
+                      ))}
+                  </div>
+                </div>
+              )}
 
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
                 <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm">

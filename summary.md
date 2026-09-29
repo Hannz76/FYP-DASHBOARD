@@ -519,3 +519,4 @@ cd backend && npm test # backend Jest (3 files, 8 tests)
 ---
 
 *This document describes the system as of 2026-09-23, including the counselor report workflow, httpOnly-cookie proxy auth, and v4 ML pipeline.*
+

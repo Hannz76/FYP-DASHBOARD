@@ -1,5 +1,6 @@
 "use client";
 import { useState, useEffect } from "react";
+import AppointmentCalendar from "./AppointmentCalendar";
 
 const statusLabels = {
   pending: "Menunggu",
@@ -134,6 +135,7 @@ export default function CounselorDashboardClient() {
         {[
           { id: "pending", label: "Laporan Menunggu" },
           { id: "scheduled", label: "Temujanji Dijadualkan" },
+          { id: "calendar", label: "Kalendar" },
           { id: "completed", label: "Selesai" },
           { id: "all", label: "Semua Laporan" },
         ].map((tab) => (
@@ -151,7 +153,12 @@ export default function CounselorDashboardClient() {
         ))}
       </div>
 
-      {filteredReports.length === 0 ? (
+      {activeTab === "calendar" ? (
+        <AppointmentCalendar
+          reports={reports.filter((r) => r.status === "scheduled" && r.scheduledDate)}
+          onComplete={openCompleteModal}
+        />
+      ) : filteredReports.length === 0 ? (
         <div className="bg-white border border-[rgba(18,81,170,0.13)] rounded-xl p-12 text-center">
           <i className="ph ph-smiley-sad text-5xl text-[#5A6A85] mb-4"></i>
           <h3 className="text-lg font-medium text-[#0A1628]">Tiada laporan dijumpai</h3>
@@ -199,6 +206,17 @@ export default function CounselorDashboardClient() {
               <div className="mb-3">
                 <p className="text-xs text-slate-500 mb-1">Sebab Rujukan</p>
                 <p className="text-sm text-slate-700 line-clamp-3">{report.reason}</p>
+                {report.filePath && (
+                  <a
+                    href={report.filePath}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-xs text-blue-700 font-medium hover:underline flex items-center gap-1 mt-2"
+                  >
+                    <i className="ph-fill ph-paperclip"></i>
+                    {report.fileName || "Muat Turun Lampiran"}
+                  </a>
+                )}
               </div>
 
               <div className="flex items-center justify-between pt-3 border-t border-slate-100">
