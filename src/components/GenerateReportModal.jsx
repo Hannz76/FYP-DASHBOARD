@@ -1,11 +1,15 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { calculateEmployability } from "@/lib/heuristics";
+import { useFilePreview } from "@/lib/use-file-preview";
+import AttachmentPreview from "@/components/ui/AttachmentPreview";
 
 export default function GenerateReportModal({ isOpen, onClose, student, skillGap }) {
   const [title, setTitle] = useState("");
   const [message, setMessage] = useState("");
-  const [file, setFile] = useState(null);
+  const surat = useFilePreview({ acceptTypes: ["application/pdf"] });
+  const fileInputRef = useRef(null);
+  const file = surat.file;
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [toast, setToast] = useState(null);
 
@@ -13,9 +17,20 @@ export default function GenerateReportModal({ isOpen, onClose, student, skillGap
     if (isOpen && student) {
       setTitle(`Laporan Prestasi ${student.nama}`);
       setMessage("");
-      setFile(null);
+      surat.clear();
+      if (fileInputRef.current) fileInputRef.current.value = "";
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, student]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, [isOpen]);
 
   useEffect(() => {
     if (toast) {
@@ -25,18 +40,7 @@ export default function GenerateReportModal({ isOpen, onClose, student, skillGap
   }, [toast]);
 
   const handleFileChange = (e) => {
-    if (e.target.files && e.target.files[0]) {
-      const selected = e.target.files[0];
-      if (selected.type !== "application/pdf") {
-        setToast({ type: "error", text: "Hanya fail PDF dibenarkan." });
-        return;
-      }
-      if (selected.size > 5 * 1024 * 1024) {
-        setToast({ type: "error", text: "Saiz fail maksimum 5MB." });
-        return;
-      }
-      setFile(selected);
-    }
+    surat.selectFile(e.target.files?.[0] || null);
   };
 
   const handleSubmit = async (e) => {
@@ -99,7 +103,7 @@ export default function GenerateReportModal({ isOpen, onClose, student, skillGap
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-[fadeIn_0.2s_ease-in-out]">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto overscroll-contain [@supports(height:100dvh)]:max-h-[90dvh]">
         <div className="sticky top-0 bg-white border-b border-slate-100 px-6 py-4 flex items-center justify-between rounded-t-2xl">
           <h2 className="text-xl font-bold text-slate-900">Jana Laporan</h2>
           <button
@@ -181,7 +185,7 @@ export default function GenerateReportModal({ isOpen, onClose, student, skillGap
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">
+              <label className="block text-sm font-medium text-slate-700 mb-1" htmlFor="surat-pdf">
                 Lampiran Surat (PDF - Max 5MB)
               </label>
               {!file ? (
@@ -191,8 +195,10 @@ export default function GenerateReportModal({ isOpen, onClose, student, skillGap
                     Klik untuk memilih fail PDF
                   </span>
                   <input
+                    id="surat-pdf"
+                    ref={fileInputRef}
                     type="file"
-                    accept=".pdf"
+                    accept="application/pdf"
                     onChange={handleFileChange}
                     className="hidden"
                   />
@@ -208,13 +214,27 @@ export default function GenerateReportModal({ isOpen, onClose, student, skillGap
                   </div>
                   <button
                     type="button"
-                    onClick={() => setFile(null)}
+                    onClick={() => {
+                      surat.clear();
+                      if (fileInputRef.current) fileInputRef.current.value = "";
+                    }}
                     className="text-red-500 hover:bg-red-50 p-1 rounded"
                   >
                     <i className="ph-bold ph-x text-lg"></i>
                   </button>
                 </div>
               )}
+              {surat.error && (
+                <p className="mt-1 text-xs text-rose-600">{surat.error}</p>
+              )}
+              <AttachmentPreview
+                file={surat.file}
+                previewUrl={surat.previewUrl}
+                onRemove={() => {
+                  surat.clear();
+                  if (fileInputRef.current) fileInputRef.current.value = "";
+                }}
+              />
             </div>
 
             <div className="flex items-center justify-between pt-4 border-t border-slate-100">

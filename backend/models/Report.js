@@ -28,6 +28,8 @@ const reportSchema = new mongoose.Schema(
     counselorId: { type: String, default: null },
     counselorNotes: { type: String, default: "" },
     scheduledDate: { type: Date, default: null },
+    fileName: { type: String, default: null },
+    filePath: { type: String, default: null },
   },
   { timestamps: true },
 );

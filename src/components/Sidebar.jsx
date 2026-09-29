@@ -1,6 +1,7 @@
 "use client";
 import React from "react";
 import Image from "next/image";
+import { getRoleLabel } from "@/lib/roles";
 
 export default function Sidebar({
   navItems,
@@ -12,7 +13,7 @@ export default function Sidebar({
   handleLogout,
 }) {
   const displayName = currentUser?.displayName || "User IKMB";
-  const roleLabel = currentUser?.role === "admin" ? "Penyelaras" : "Pelajar";
+  const roleLabel = getRoleLabel(currentUser?.role);
   const userInitials = displayName
     .split(" ")
     .map((part) => part[0])

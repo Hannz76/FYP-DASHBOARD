@@ -1,5 +1,12 @@
 "use client";
 import { useState, useEffect } from "react";
+import AppointmentCalendar from "./AppointmentCalendar";
+import {
+  StatCard,
+  PillTabs,
+  Badge,
+  EmptyState,
+} from "../ui/dashboard-kit";
 
 const statusLabels = {
   pending: "Menunggu",
@@ -24,7 +31,7 @@ const priorityColors = {
 
 export default function CounselorDashboardClient() {
   const [reports, setReports] = useState([]);
-  const [activeTab, setActiveTab] = useState("pending");
+  const [activeTab, setActiveTab] = useState("calendar");
   const [isLoading, setIsLoading] = useState(true);
   const [selectedReport, setSelectedReport] = useState(null);
   const [scheduleDate, setScheduleDate] = useState("");
@@ -116,139 +123,125 @@ export default function CounselorDashboardClient() {
         </p>
       </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        {[
-          { label: "Menunggu", value: counts.pending, color: "bg-yellow-500" },
-          { label: "Dijadualkan", value: counts.scheduled, color: "bg-purple-500" },
-          { label: "Selesai", value: counts.completed, color: "bg-green-500" },
-          { label: "Jumlah", value: counts.total, color: "bg-blue-500" },
-        ].map((c) => (
-          <div key={c.label} className="bg-white p-4 rounded-xl border border-slate-100 shadow-sm">
-            <p className="text-2xl font-bold text-slate-900">{c.value}</p>
-            <p className="text-xs text-slate-500">{c.label}</p>
-          </div>
-        ))}
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <StatCard icon="ph-hourglass-medium" label="Menunggu" value={counts.pending} tone="amber" />
+        <StatCard icon="ph-calendar-blank" label="Dijadualkan" value={counts.scheduled} tone="blue" />
+        <StatCard icon="ph-check-circle" label="Selesai" value={counts.completed} tone="green" />
+        <StatCard icon="ph-stack" label="Jumlah Rujukan" value={counts.total} tone="purple" />
       </div>
 
-      <div className="flex gap-2 overflow-x-auto pb-2">
-        {[
-          { id: "pending", label: "Laporan Menunggu" },
-          { id: "scheduled", label: "Temujanji Dijadualkan" },
-          { id: "completed", label: "Selesai" },
-          { id: "all", label: "Semua Laporan" },
-        ].map((tab) => (
-          <button
-            key={tab.id}
-            onClick={() => setActiveTab(tab.id)}
-            className={`px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-colors ${
-              activeTab === tab.id
-                ? "bg-[#0C2461] text-white"
-                : "bg-white text-[#5A6A85] hover:bg-gray-50 border border-[rgba(18,81,170,0.13)]"
-            }`}
-          >
-            {tab.label}
-          </button>
-        ))}
-      </div>
+      <PillTabs
+        ariaLabel="Mod paparan kaunselor"
+        active={activeTab}
+        onChange={setActiveTab}
+        tabs={[
+          { id: "pending", label: "Menunggu", icon: "ph-hourglass-medium", count: counts.pending },
+          { id: "scheduled", label: "Dijadualkan", icon: "ph-calendar-blank", count: counts.scheduled },
+          { id: "calendar", label: "Kalendar", icon: "ph-calendar-dots" },
+          { id: "completed", label: "Selesai", icon: "ph-check-circle", count: counts.completed },
+          { id: "all", label: "Semua", icon: "ph-rows", count: counts.total },
+        ]}
+      />
 
-      {filteredReports.length === 0 ? (
-        <div className="bg-white border border-[rgba(18,81,170,0.13)] rounded-xl p-12 text-center">
-          <i className="ph ph-smiley-sad text-5xl text-[#5A6A85] mb-4"></i>
-          <h3 className="text-lg font-medium text-[#0A1628]">Tiada laporan dijumpai</h3>
-        </div>
+      {activeTab === "calendar" ? (
+        <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6">
+          <AppointmentCalendar
+            reports={reports.filter((r) => r.status === "scheduled" && r.scheduledDate)}
+            onComplete={openCompleteModal}
+          />
+        </section>
+      ) : filteredReports.length === 0 ? (
+        <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+          <EmptyState icon="ph-chats-circle" title="Tiada rujukan" message="Tiada rekod untuk tab ini." />
+        </section>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {filteredReports.map((report) => (
-            <div key={report._id} className="bg-white rounded-xl border border-slate-100 shadow-sm p-5">
-              <div className="flex justify-between items-start mb-3">
-                <div className="flex items-center gap-3">
-                  <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white font-bold ${
-                    report.riskLevel === "Tinggi" || report.riskLevel === "Bermasalah"
-                      ? "bg-red-500"
-                      : report.riskLevel === "Rendah" || report.riskLevel === "Cemerlang"
-                      ? "bg-green-500"
-                      : "bg-amber-500"
-                  }`}>
-                    {report.studentName?.charAt(0) || "?"}
-                  </div>
-                  <div>
-                    <h3 className="font-bold text-slate-900">{report.studentName}</h3>
-                    <p className="text-xs text-slate-500">{report.studentId} • {report.course || "-"}</p>
-                  </div>
-                </div>
-                <span className={`px-2 py-1 rounded-md text-[10px] font-bold border ${priorityColors[report.priority]}`}>
-                  {report.priority === "urgent" ? "Segera" : "Biasa"}
-                </span>
-              </div>
-
-              <div className="grid grid-cols-3 gap-2 text-xs mb-3">
-                <div className="bg-slate-50 p-2 rounded-lg">
-                  <p className="text-slate-500">CGPA</p>
-                  <p className="font-bold text-slate-900">{report.cgpa || "-"}</p>
-                </div>
-                <div className="bg-slate-50 p-2 rounded-lg">
-                  <p className="text-slate-500">Kehadiran</p>
-                  <p className="font-bold text-slate-900">{report.attendance || "-"}%</p>
-                </div>
-                <div className="bg-slate-50 p-2 rounded-lg">
-                  <p className="text-slate-500">Risiko</p>
-                  <p className="font-bold text-slate-900">{report.riskLevel || "-"}</p>
-                </div>
-              </div>
-
-              <div className="mb-3">
-                <p className="text-xs text-slate-500 mb-1">Sebab Rujukan</p>
-                <p className="text-sm text-slate-700 line-clamp-3">{report.reason}</p>
-              </div>
-
-              <div className="flex items-center justify-between pt-3 border-t border-slate-100">
-                <span className={`px-2 py-1 rounded-md text-[10px] font-bold border ${statusColors[report.status]}`}>
-                  {statusLabels[report.status]}
-                </span>
-                <div className="flex gap-2">
-                  {report.status === "pending" && (
-                    <>
-                      <button
-                        onClick={() => updateReport(report._id, { status: "accepted" })}
-                        className="px-3 py-1.5 rounded-lg text-xs font-medium bg-blue-600 text-white hover:bg-blue-700"
+        <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+          <ul className="space-y-3">
+            {filteredReports.map((report) => (
+              <li key={report._id}>
+                <article className="flex flex-col gap-4 rounded-xl border border-slate-200 bg-white p-4 transition hover:border-blue-300 hover:shadow-md lg:flex-row lg:items-center">
+                  <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
+                    <i
+                      className={`ph text-xl ${
+                        report.interventionType === "klinik"
+                          ? "ph-first-aid-kit"
+                          : report.interventionType === "softskills"
+                            ? "ph-users-three"
+                            : "ph-chats-circle"
+                      }`}
+                    />
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Badge tone="blue">{report.interventionType}</Badge>
+                      <Badge tone={report.status === "completed" ? "green" : report.status === "scheduled" ? "purple" : report.status === "pending" ? "amber" : "rose"}>
+                        {statusLabels[report.status] ?? report.status}
+                      </Badge>
+                      <Badge tone={report.priority === "urgent" ? "rose" : "slate"}>
+                        {report.priority === "urgent" ? "Segera" : "Biasa"}
+                      </Badge>
+                    </div>
+                    <h3 className="mt-1.5 truncate text-sm font-bold text-slate-900">
+                      {report.studentName} <span className="font-medium text-slate-400">• {report.studentId}</span>
+                    </h3>
+                    <p className="mt-0.5 truncate text-xs text-slate-500">{report.reason}</p>
+                    {report.filePath && (
+                      <a
+                        href={report.filePath}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-xs text-blue-700 font-medium hover:underline flex items-center gap-1 mt-2"
                       >
-                        Terima
-                      </button>
+                        <i className="ph-fill ph-paperclip"></i>
+                        {report.fileName || "Muat Turun Lampiran"}
+                      </a>
+                    )}
+                  </div>
+                  <div className="flex shrink-0 flex-wrap gap-2">
+                    {report.status === "pending" && (
+                      <>
+                        <button
+                          onClick={() => updateReport(report._id, { status: "accepted" })}
+                          className="px-3 py-1.5 rounded-lg text-xs font-medium bg-blue-600 text-white hover:bg-blue-700"
+                        >
+                          Terima
+                        </button>
+                        <button
+                          onClick={() => updateReport(report._id, { status: "rejected" })}
+                          className="px-3 py-1.5 rounded-lg text-xs font-medium bg-white border border-slate-200 text-slate-600 hover:bg-slate-50"
+                        >
+                          Tolak
+                        </button>
+                      </>
+                    )}
+                    {report.status === "accepted" && (
                       <button
-                        onClick={() => updateReport(report._id, { status: "rejected" })}
-                        className="px-3 py-1.5 rounded-lg text-xs font-medium bg-white border border-slate-200 text-slate-600 hover:bg-slate-50"
+                        onClick={() => openScheduleModal(report)}
+                        className="px-3 py-1.5 rounded-lg text-xs font-medium bg-purple-600 text-white hover:bg-purple-700"
                       >
-                        Tolak
+                        Jadualkan
                       </button>
-                    </>
-                  )}
-                  {report.status === "accepted" && (
-                    <button
-                      onClick={() => openScheduleModal(report)}
-                      className="px-3 py-1.5 rounded-lg text-xs font-medium bg-purple-600 text-white hover:bg-purple-700"
-                    >
-                      Jadualkan
-                    </button>
-                  )}
-                  {report.status === "scheduled" && (
-                    <button
-                      onClick={() => openCompleteModal(report)}
-                      className="px-3 py-1.5 rounded-lg text-xs font-medium bg-green-600 text-white hover:bg-green-700"
-                    >
-                      Selesai
-                    </button>
-                  )}
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
+                    )}
+                    {report.status === "scheduled" && (
+                      <button
+                        onClick={() => openCompleteModal(report)}
+                        className="px-3 py-1.5 rounded-lg text-xs font-medium bg-green-600 text-white hover:bg-green-700"
+                      >
+                        Selesai
+                      </button>
+                    )}
+                  </div>
+                </article>
+              </li>
+            ))}
+          </ul>
+        </section>
       )}
 
       {/* Schedule Modal */}
       {selectedReport?.action === "schedule" && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md max-h-[90vh] overflow-y-auto overscroll-contain p-6 [@supports(height:100dvh)]:max-h-[90dvh]">
             <h3 className="text-lg font-bold text-slate-900 mb-4">Jadualkan Temujanji</h3>
             <p className="text-sm text-slate-500 mb-4">
               {selectedReport.studentName} ({selectedReport.studentId})
@@ -285,7 +278,7 @@ export default function CounselorDashboardClient() {
       {/* Complete Modal */}
       {selectedReport?.action === "complete" && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md max-h-[90vh] overflow-y-auto overscroll-contain p-6 [@supports(height:100dvh)]:max-h-[90dvh]">
             <h3 className="text-lg font-bold text-slate-900 mb-4">Tanda Selesai</h3>
             <p className="text-sm text-slate-500 mb-4">
               {selectedReport.studentName} ({selectedReport.studentId})
