@@ -881,3 +881,325 @@ The most important identifiers and contracts are:
 - `StudentReport` is the staff-to-student communication record.
 
 The architecture is understandable as one flow: institutional data enters through MDB ETL, MongoDB stores the normalized records, ML classifies risk, Express protects and exposes the data, and Next.js presents dashboards and intervention workflows for staff and students.
+
+---
+
+## 20. Current implementation update
+
+This section records the implementation that exists in the current working tree. It supplements the original architecture description above and is especially important for the recent UI, appointment, attachment-preview, and role-label changes.
+
+### 20.1 Current source inventory
+
+The current `src` tree contains these functional areas:
+
+```text
+src/
+├── app/
+│   ├── actions.js
+│   ├── globals.css
+│   ├── layout.jsx
+│   ├── page.jsx
+│   ├── api/[...proxy]/route.js
+│   ├── staff-dashboard/page.jsx
+│   ├── student-dashboard/page.jsx
+│   └── student-profile/page.jsx
+├── components/
+│   ├── auth/LoginForm.jsx
+│   ├── dashboard/
+│   │   ├── AppointmentCalendar.jsx
+│   │   ├── CounselorDashboardClient.jsx
+│   │   ├── MergedLaporanTab.jsx
+│   │   ├── StaffDashboardClient.jsx
+│   │   ├── StudentDashboardClient.jsx
+│   │   ├── StudentProfileClient.jsx
+│   │   └── StudentReportsTab.jsx
+│   ├── ui/
+│   │   ├── AttachmentPreview.jsx
+│   │   └── dashboard-kit.jsx
+│   ├── GenerateReportModal.jsx
+│   ├── JobCard.jsx
+│   ├── KpiCard.jsx
+│   ├── ReportFormModal.jsx
+│   ├── Sidebar.jsx
+│   ├── StudentDetailModal.jsx
+│   ├── StudentListGrid.jsx
+│   └── StudentModal.jsx
+├── lib/
+│   ├── auth.js
+│   ├── client-auth.js
+│   ├── heuristics.js
+│   ├── roles.js
+│   └── use-file-preview.js
+└── __tests__/
+    ├── AppointmentCalendar.test.jsx
+    ├── attachment-preview.test.jsx
+    ├── dashboard-kit.test.jsx
+    ├── GenerateReportModal.test.jsx
+    ├── Login.test.jsx
+    ├── MergedLaporanTab.test.jsx
+    ├── ReportFormModal.test.jsx
+    ├── roles.test.js
+    └── StudentDetailModal.test.jsx
+```
+
+The old `StudentReportsTab.jsx` remains in the repository and still contains the original reports-only implementation. The active student dashboard now renders `MergedLaporanTab.jsx` for the `reports` tab, so `StudentReportsTab.jsx` is currently retained code rather than the active route component.
+
+### 20.2 Merged student “Laporan Saya” experience
+
+The student dashboard uses `MergedLaporanTab` instead of rendering `StudentReportsTab` directly:
+
+```jsx
+{activeTab === "reports" && <MergedLaporanTab />}
+```
+
+`MergedLaporanTab.jsx` fetches both sources in parallel:
+
+- `GET /api/student-reports` for generated staff reports;
+- `GET /api/reports/mine` for accepted/scheduled counselor appointments.
+
+Each result is normalized with an `itemType`:
+
+```text
+student report  → itemType: "report"
+appointment     → itemType: "appointment"
+```
+
+The normalizer also creates:
+
+- `displayTitle` — report title or an intervention label;
+- `displayDate` — report `createdAt` or appointment `scheduledDate`.
+
+The merged array is sorted newest-first. Missing or invalid dates sort to the bottom because the sorter treats a missing date as timestamp zero.
+
+The tab provides:
+
+- a record count;
+- filter pills for `Semua`, `Laporan`, and `Temujanji`;
+- report/appointment counts computed with `useMemo`;
+- loading skeleton rows;
+- a dashed empty state;
+- blue report and purple appointment badges/icons;
+- a red `Baharu` badge for unread student reports;
+- status badges for appointments;
+- a shared `Lihat Butiran` button.
+
+When a student opens an unread generated report, the component calls `GET /api/student-reports/:id`. The backend marks `readByStudent` true. The component then updates its local merged item, removes the unread badge, and opens the returned detail data.
+
+Appointments do not call a student detail endpoint. The student appointment endpoint already returns the fields needed by the modal, and the staff-only `GET /api/reports/:id` route must not be used by a student.
+
+### 20.3 Shared student detail modal
+
+`src/components/StudentDetailModal.jsx` is the shared detail surface for both appointment and report records. It supports two compatible APIs:
+
+1. Explicit mode:
+   ```jsx
+   <StudentDetailModal
+     kind="appointment"
+     appointment={appointment}
+     onClose={...}
+   />
+   ```
+2. Merged-item mode:
+   ```jsx
+   <StudentDetailModal item={selectedItem} onClose={...} />
+   ```
+
+The component resolves `item.itemType` before falling back to `kind`. This keeps older appointment/report callers working while allowing the merged tab to pass one object.
+
+Appointment details display:
+
+- intervention type;
+- scheduled date and time;
+- workflow status;
+- priority;
+- counselor email stored in `counselorId`;
+- creating admin email;
+- course and student ID;
+- referral reason;
+- counselor notes when present;
+- referral attachment link when present.
+
+Generated report details display:
+
+- student identity and academic snapshot;
+- CGPA, attendance, course, semester, risk, employability;
+- report message;
+- embedded PDF when present;
+- download, print, and share controls.
+
+The modal closes through the close button, backdrop click, or Escape. It uses `max-h-[90vh]` and internal overflow scrolling.
+
+### 20.4 Counselor dashboard UI and default view
+
+`CounselorDashboardClient.jsx` still owns referral data and workflow behavior, but its presentation now uses the shared dashboard kit.
+
+The initial state is explicitly:
+
+```jsx
+const [activeTab, setActiveTab] = useState("calendar");
+```
+
+Therefore, opening the Kaunselor tab first shows the calendar. The parent staff dashboard conditionally mounts the counselor component, so switching away and returning resets the local counselor view to Calendar.
+
+The dashboard now includes:
+
+- four gradient `StatCard`s for pending, scheduled, completed, and total referrals;
+- accessible `PillTabs` for pending, scheduled, calendar, completed, and all;
+- a white card wrapper around the appointment calendar;
+- unified responsive referral rows;
+- intervention icons for counseling, clinic, and soft-skills records;
+- badges for intervention type, status, and priority;
+- the existing accept/reject/schedule/complete actions.
+
+The real backend field is `interventionType`. UI code must not use the hypothetical field name `intervention`. Priority values are `urgent` and `normal`, not `tinggi`, `sederhana`, or `rendah`.
+
+### 20.5 Shared dashboard UI kit
+
+`src/components/ui/dashboard-kit.jsx` defines the current visual primitives:
+
+- `Badge` — tone-based compact badge;
+- `StatCard` — gradient icon tile plus metric value;
+- `SectionCard` — titled white card with icon header and actions slot;
+- `PillTabs` — tablist/tab semantics, `aria-selected`, counts, and focus-visible styling;
+- `EmptyState` — consistent dashed empty panel;
+- `SkeletonList` — loading placeholders;
+- `formatMsDate` — Malay date formatter returning `-` for invalid input.
+
+Tone tokens currently include blue, purple, green, amber, rose, and slate. The kit keeps the counselor and student record UIs consistent with the Overview dashboard without adding another dependency.
+
+### 20.6 Attachment preview system
+
+The two staff modals use one attachment-preview implementation.
+
+#### `src/lib/use-file-preview.js`
+
+`useFilePreview` manages:
+
+- selected `File` state;
+- an object URL for display;
+- validation error state;
+- selection and clear callbacks;
+- object URL cleanup on replacement and unmount.
+
+The default accepted MIME types are PDF, JPEG, and PNG. The hook also accepts a matching extension when the browser reports an empty or unusual MIME type. The default limit is 5 MB.
+
+It exports `formatFileSize`, which formats bytes as B, KB, or MB.
+
+#### `src/components/ui/AttachmentPreview.jsx`
+
+The shared preview displays:
+
+- original filename;
+- formatted file size;
+- `Buka` link for browser fallback;
+- `Buang` action;
+- PDF iframe preview;
+- image preview using `object-contain`.
+
+#### Set Temujanji
+
+`ReportFormModal.jsx` uses the default hook configuration for PDF/JPG/PNG. The browser field remains named `file` in `FormData`, matching backend `upload.single("file")`.
+
+The modal now has a three-region layout:
+
+1. fixed header;
+2. independently scrollable body with `overflow-y-auto overscroll-contain`;
+3. fixed footer containing `Batal` and `Hantar Rujukan`.
+
+The modal also locks document body scrolling while open, supports `90dvh` where available, and uses a static intervention-style map. This avoids Tailwind classes such as `bg-${color}-50`, which Tailwind cannot reliably discover during compilation.
+
+#### Jana Laporan
+
+`GenerateReportModal.jsx` uses `useFilePreview({ acceptTypes: ["application/pdf"] })`. It keeps the backend field name `file`, adds the same PDF preview, and resets the file on opening or removal. Its outer panel has internal overflow scrolling and the same body scroll lock.
+
+### 20.7 Current role-label behavior
+
+`src/lib/roles.js` is the frontend role-label source of truth:
+
+| Stored role | Display label | UI group |
+|---|---|---|
+| `admin` | `Penyelaras` | `staff` |
+| `counselor` | `Penyelaras` | `staff` |
+| `user` | `Pelajar` | `student` |
+
+`Sidebar.jsx` uses `getRoleLabel(currentUser?.role)`. This fixes the previous fallback where every non-admin role displayed as `Pelajar`.
+
+This is presentation-only. The stored MongoDB role and JWT claim remain `counselor`, and backend authorization still distinguishes `admin` from `counselor`. Report author attribution intentionally continues to display `Kaunselor` where the UI is describing who authored a report; the sidebar is the place where counselor is grouped under the staff-facing `Penyelaras` label.
+
+`isStaff` is also available from the same module for future frontend guards, but existing route protection still uses its established explicit `admin`/`counselor` checks.
+
+### 20.8 Current modal scroll behavior
+
+The repository now treats modal overflow as a reusable UI requirement:
+
+- `ReportFormModal` — fixed header/body/footer layout;
+- `GenerateReportModal` — internal panel scroll plus `overscroll-contain`;
+- counselor schedule modal — max-height and internal scroll;
+- counselor completion modal — max-height and internal scroll;
+- `StudentModal` — already uses max-height and internal scroll;
+- `StudentDetailModal` — already uses max-height and internal scroll.
+
+The body scroll lock is implemented in the two large staff form modals. The smaller counselor action modals rely on their constrained panel scroll because their interaction is short and localized.
+
+---
+
+## 21. Current test coverage
+
+The current frontend suite contains nine test files and 35 passing tests in the working tree. In addition to the earlier login, report, referral, and calendar coverage, current tests cover:
+
+- `MergedLaporanTab.test.jsx` — merging, normalization, sorting, missing dates, badges, and modal opening;
+- `StudentDetailModal.test.jsx` — appointment and report detail rendering;
+- `attachment-preview.test.jsx` — shared PDF/image preview, oversized-file rejection, both modals, and modal scroll regression;
+- `dashboard-kit.test.jsx` — `aria-selected`, tab changes, section/empty primitives, date guards, and badge rendering;
+- `roles.test.js` — counselor/admin staff labels, student label, unknown-role fallback, and staff grouping.
+
+The attachment tests stub `URL.createObjectURL` and `URL.revokeObjectURL` because jsdom does not provide browser object-URL behavior by default.
+
+The test command remains:
+
+```bash
+npm test
+```
+
+The latest verified frontend result is:
+
+```text
+Test Files  9 passed (9)
+Tests       35 passed (35)
+```
+
+The backend suite remains three Jest suites with eight tests. The ML suite remains the three FastAPI/Pytest checks described earlier. The latest frontend build also succeeds after the modal and dashboard UI changes.
+
+---
+
+## 22. Current file-by-file change map
+
+The most recently updated application files have these responsibilities:
+
+| File | Current responsibility |
+|---|---|
+| `src/components/dashboard/MergedLaporanTab.jsx` | Fetch and filter merged reports/appointments; unread handling; shared detail modal |
+| `src/components/dashboard/CounselorDashboardClient.jsx` | Staff referral workflow, Calendar-first tabs, responsive referral UI |
+| `src/components/ReportFormModal.jsx` | Create referral, select counselor, upload attachment, scroll-safe form |
+| `src/components/GenerateReportModal.jsx` | Create student report, optional PDF, scroll-safe form |
+| `src/components/StudentDetailModal.jsx` | Shared appointment/report detail display |
+| `src/components/ui/dashboard-kit.jsx` | Shared dashboard visual primitives and date formatting |
+| `src/components/ui/AttachmentPreview.jsx` | PDF/image preview and file controls |
+| `src/lib/use-file-preview.js` | File validation, object URL lifecycle, file-size formatting |
+| `src/lib/roles.js` | Frontend role labels and staff grouping |
+| `src/components/Sidebar.jsx` | Uses centralized role labels for the logged-in user badge |
+| `src/__tests__/attachment-preview.test.jsx` | Preview, validation, and modal-scroll regression tests |
+| `src/__tests__/dashboard-kit.test.jsx` | Shared dashboard UI primitive tests |
+| `src/__tests__/roles.test.js` | Role label/group tests |
+
+The backend contracts used by these features remain:
+
+- referral upload field: `file`;
+- report upload field: `file`;
+- appointment date: `scheduledDate`;
+- appointment intervention: `interventionType`;
+- appointment counselor: `counselorId`;
+- counselor notes: `counselorNotes`;
+- generated report file path: `filePath`.
+
+These names are important because several early UI proposals used aliases such as `attachment`, `appointmentDate`, `intervention`, `notes`, and `pdfPath`. The current implementation does not use those aliases.
