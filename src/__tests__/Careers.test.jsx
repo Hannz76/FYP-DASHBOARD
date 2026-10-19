@@ -48,8 +48,10 @@ afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 
 async function openCareers(view) {
   render(<StudentDashboardClient />);
+  // The sidebar can briefly render before the selected student's data finishes loading.
+  await screen.findByText("Test insight");
   fireEvent.click(await screen.findByRole("button", { name: "Padanan Kerjaya (AI)" }));
-  if (view) fireEvent.click(screen.getByRole("button", { name: view }));
+  if (view) fireEvent.click(await screen.findByRole("button", { name: view }));
 }
 
 describe("career tab", () => {
