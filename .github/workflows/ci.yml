@@ -7,6 +7,13 @@ on:
     branches: [ "main", "master" ]
 
 jobs:
+  repository-hygiene:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check tracked files and environment templates
+        run: python3 scripts/check-repository.py
+
   # --- 1. FRONTEND TEST & BUILD (Next.js 15 SSR) ---
   frontend:
     runs-on: ubuntu-latest
@@ -28,6 +35,16 @@ jobs:
   # --- 2. BACKEND TEST (Express + Jest) ---
   backend:
     runs-on: ubuntu-latest
+    services:
+      redis:
+        image: redis:7.4-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 2s
+          --health-retries 5
     defaults:
       run:
         working-directory: backend
@@ -40,6 +57,8 @@ jobs:
       - name: Install Dependencies
         run: npm install
       - name: Run Backend Tests (Jest + Supertest)
+        env:
+          CAREER_TEST_REDIS_URL: redis://127.0.0.1:6379/15
         run: npm test
 
   # --- 3. ML SERVICE TEST (FastAPI + Pytest) ---
@@ -63,7 +82,7 @@ jobs:
 
   # --- 4. DOCKER BUILD (Only if all tests pass) ---
   docker-build:
-    needs: [frontend, backend, ml-service]
+    needs: [repository-hygiene, frontend, backend, ml-service]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

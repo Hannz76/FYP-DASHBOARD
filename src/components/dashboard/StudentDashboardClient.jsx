@@ -187,10 +187,32 @@ export default function StudentDashboardClient() {
   const [manualQuery, setManualQuery] = useState("");
   const [manualLocation, setManualLocation] = useState("Malaysia");
   const [manualEmploymentType, setManualEmploymentType] = useState("INTERN");
+  const [manualDatePosted, setManualDatePosted] = useState("all");
   const [manualJobs, setManualJobs] = useState([]);
   const [manualLoading, setManualLoading] = useState(false);
   const [manualError, setManualError] = useState("");
   const [manualSearched, setManualSearched] = useState(false);
+  const [manualCursor, setManualCursor] = useState(null);
+  const [lastManualSearch, setLastManualSearch] = useState(null);
+  const [manualFailedPage, setManualFailedPage] = useState(false);
+  const [recentSearches, setRecentSearches] = useState([]);
+  const [recentOpen, setRecentOpen] = useState(false);
+  const [recentIndex, setRecentIndex] = useState(-1);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyError, setHistoryError] = useState("");
+  const [careerResetAt, setCareerResetAt] = useState(null);
+  const [detailsJobId, setDetailsJobId] = useState(null);
+  const [jobDetails, setJobDetails] = useState(null);
+  const [savedJobs, setSavedJobs] = useState([]);
+  const [savedLoading, setSavedLoading] = useState(true);
+  const [savedError, setSavedError] = useState("");
+  const [savedRetry, setSavedRetry] = useState(0);
+  const [saveMessage, setSaveMessage] = useState("");
+  const [saveError, setSaveError] = useState("");
+  const [savingIds, setSavingIds] = useState([]);
+  const saveRequests = useRef(new Map());
+  const [detailsLoading, setDetailsLoading] = useState(false);
+  const [detailsError, setDetailsError] = useState("");
   const [pathway, setPathway] = useState(null);
   const [pathwayJobs, setPathwayJobs] = useState([]);
   const [pathwayLoading, setPathwayLoading] = useState(false);
@@ -198,9 +220,178 @@ export default function StudentDashboardClient() {
   const [pathwayWarning, setPathwayWarning] = useState("");
   const [pathwayRetry, setPathwayRetry] = useState(0);
   const manualRequest = useRef(null);
-  const careerJobs = useMemo(() => careerView === "manual" ? manualJobs : pathwayJobs, [careerView, manualJobs, pathwayJobs]);
+  const historyRequest = useRef(null);
+  const detailsRequest = useRef(null);
+  const careerJobs = useMemo(() => careerView === "saved" ? savedJobs : careerView === "manual" ? manualJobs : pathwayJobs, [careerView, savedJobs, manualJobs, pathwayJobs]);
+  const visibleRecentSearches = useMemo(() => recentSearches.filter((keyword) => keyword.toLowerCase().includes(manualQuery.trim().toLowerCase())), [recentSearches, manualQuery]);
 
-  useEffect(() => () => manualRequest.current?.abort(), []);
+  useEffect(() => () => {
+    manualRequest.current?.abort();
+    historyRequest.current?.abort();
+    detailsRequest.current?.abort();
+    for (const controller of saveRequests.current.values()) controller.abort();
+  }, []);
+
+  useEffect(() => {
+    setRecentSearches([]);
+    setRecentOpen(false);
+    setJobDetails(null); setDetailsJobId(null);
+    setDetailsLoading(false);
+    setDetailsError("");
+    setManualCursor(null);
+    setLastManualSearch(null);
+    setManualFailedPage(false);
+    setManualError("");
+    setHistoryError("");
+    setManualJobs([]);
+    setManualLoading(false);
+    manualRequest.current?.abort();
+    historyRequest.current?.abort();
+    detailsRequest.current?.abort();
+  }, [selectedStudentId]);
+
+  useEffect(() => {
+    if (!careerResetAt) return;
+    const timeout = setTimeout(() => {
+      manualRequest.current?.abort();
+      historyRequest.current?.abort();
+      detailsRequest.current?.abort();
+      setManualJobs([]);
+      setPathwayJobs([]);
+      setRecentSearches([]);
+      setRecentOpen(false);
+      setManualCursor(null);
+      setLastManualSearch(null);
+      setManualFailedPage(false);
+      setJobDetails(null); setDetailsJobId(null);
+      setDetailsError("");
+      setHistoryError("");
+      setManualLoading(false);
+      setHistoryLoading(false);
+      setDetailsLoading(false);
+      setManualError("Carian harian telah ditetapkan semula pada 8 pagi. Mulakan carian baharu.");
+      setCareerResetAt(null);
+      setPathwayRetry((value) => value + 1);
+    }, Math.max(0, careerResetAt - Date.now()));
+    return () => clearTimeout(timeout);
+  }, [careerResetAt]);
+
+  useEffect(() => {
+    setSavedJobs([]);
+    setSavingIds([]);
+    setSaveMessage("");
+    setSaveError("");
+    for (const controller of saveRequests.current.values()) controller.abort();
+    saveRequests.current.clear();
+  }, [user?.studentId, user?.role]);
+
+  useEffect(() => {
+    if (user?.role !== "user" || !user?.studentId) return;
+    const controller = new AbortController();
+    setSavedLoading(true);
+    setSavedError("");
+    async function loadSavedJobs() {
+      try {
+        const res = await fetch("/api/careers/saved-jobs", { signal: controller.signal });
+        const data = await res.json();
+        if (!res.ok || !data.success) throw new Error(data.message || "Jawatan disimpan tidak dapat dimuatkan.");
+        if (!controller.signal.aborted) setSavedJobs(data.jobs);
+      } catch (error) {
+        if (!controller.signal.aborted) setSavedError(error.message);
+      } finally {
+        if (!controller.signal.aborted) setSavedLoading(false);
+      }
+    }
+    loadSavedJobs();
+    return () => controller.abort();
+  }, [user?.studentId, user?.role, savedRetry]);
+
+  const toggleSavedJob = async (job) => {
+    if (savedLoading || savedError || saveRequests.current.has(job.jobId)) return;
+    const removing = savedJobs.some((saved) => saved.jobId === job.jobId);
+    const controller = new AbortController();
+    saveRequests.current.set(job.jobId, controller);
+    setSavingIds((ids) => [...ids, job.jobId]);
+    setSaveMessage("");
+    setSaveError("");
+    try {
+      const url = `/api/careers/saved-jobs${removing ? `?${new URLSearchParams({ job_id: job.jobId })}` : ""}`;
+      const res = await fetch(url, {
+        method: removing ? "DELETE" : "POST",
+        ...(removing ? {} : { headers: { "Content-Type": "application/json" }, body: JSON.stringify({ job }) }),
+        signal: controller.signal,
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) throw new Error(data.message || "Jawatan tidak dapat disimpan. Sila cuba lagi.");
+      if (controller.signal.aborted) return;
+      setSavedJobs((jobs) => removing ? jobs.filter((saved) => saved.jobId !== job.jobId) : [data.job, ...jobs.filter((saved) => saved.jobId !== job.jobId)]);
+      setSaveMessage(removing ? "Jawatan dikeluarkan daripada simpanan." : "Jawatan berjaya disimpan.");
+    } catch (error) {
+      if (!controller.signal.aborted) setSaveError(error.message);
+    } finally {
+      if (!controller.signal.aborted) {
+        saveRequests.current.delete(job.jobId);
+        setSavingIds((ids) => ids.filter((id) => id !== job.jobId));
+      }
+    }
+  };
+
+  const toggleJobDetails = (job) => {
+    if (detailsJobId !== job.jobId) { loadJobDetails(job); return; }
+    detailsRequest.current?.abort();
+    setDetailsJobId(null);
+    setJobDetails(null);
+    setDetailsError("");
+    setDetailsLoading(false);
+  };
+
+  const loadRecentSearches = async () => {
+    historyRequest.current?.abort();
+    const controller = new AbortController();
+    historyRequest.current = controller;
+    setRecentOpen(true);
+    setRecentIndex(-1);
+    setHistoryLoading(true);
+    setHistoryError("");
+    try {
+      const params = new URLSearchParams(selectedStudentId ? { studentId: selectedStudentId } : {});
+      const res = await fetch(`/api/careers/history?${params}`, { signal: controller.signal });
+      const data = await res.json();
+      if (!res.ok || !data.success) throw new Error(data.message || "Sejarah carian tidak tersedia.");
+      if (controller.signal.aborted) return;
+      if (data.resetAt <= Date.now()) throw new Error("Sejarah harian telah ditetapkan semula.");
+      setRecentSearches(data.keywords);
+      setCareerResetAt(data.resetAt);
+    } catch (error) {
+      if (!controller.signal.aborted) { setRecentSearches([]); setHistoryError(error.message); }
+    } finally {
+      if (!controller.signal.aborted) setHistoryLoading(false);
+    }
+  };
+
+  const loadJobDetails = async (job) => {
+    detailsRequest.current?.abort();
+    const controller = new AbortController();
+    detailsRequest.current = controller;
+    setJobDetails(null); setDetailsJobId(null);
+    setDetailsError("");
+    setDetailsLoading(true);
+    setDetailsJobId(job.jobId);
+    try {
+      const params = new URLSearchParams({ job_id: job.jobId, ...(selectedStudentId ? { studentId: selectedStudentId } : {}) });
+      const res = await fetch(`/api/careers/job-details?${params}`, { signal: controller.signal });
+      const data = await res.json();
+      if (!res.ok || !data.success) throw new Error(data.message || "Butiran jawatan tidak tersedia.");
+      if (controller.signal.aborted) return;
+      if (data.resetAt <= Date.now()) throw new Error("Butiran harian telah ditetapkan semula. Cuba lagi.");
+      setJobDetails(data.job);
+      setCareerResetAt(data.resetAt);
+    } catch (error) {
+      if (!controller.signal.aborted) setDetailsError(error.message);
+    } finally {
+      if (!controller.signal.aborted) setDetailsLoading(false);
+    }
+  };
 
   useEffect(() => {
     if (activeTab !== "career" || careerView !== "pathway" || !selectedStudentId) return;
@@ -216,9 +407,11 @@ export default function StudentDashboardClient() {
         const data = await res.json();
         if (!res.ok || !data.success) throw new Error(data.message || "Laluan pembelajaran tidak dapat dimuatkan.");
         if (controller.signal.aborted) return;
+        if (data.resetAt <= Date.now()) throw new Error("Carian harian telah ditetapkan semula. Cuba lagi.");
         setPathway(data.pathway);
         setPathwayJobs(data.jobs);
         setPathwayWarning(data.warning || "");
+        if (data.resetAt) setCareerResetAt(data.resetAt);
       } catch (error) {
         if (!controller.signal.aborted) setPathwayError(error.message || "Sambungan gagal. Sila cuba lagi.");
       } finally {
@@ -229,9 +422,10 @@ export default function StudentDashboardClient() {
     return () => controller.abort();
   }, [activeTab, careerView, selectedStudentId, pathwayRetry]);
 
-  const handleManualSearch = async (event, suggested = null) => {
+  const handleManualSearch = async (event, suggested = null, append = false) => {
     event?.preventDefault();
-    const search = suggested || { q: manualQuery, location: manualLocation, employmentType: manualEmploymentType };
+    const search = append ? lastManualSearch : { ...(suggested || { q: manualQuery, location: manualLocation, employmentType: manualEmploymentType }), date_posted: manualDatePosted };
+    if (!search || (append && (!manualCursor || !careerResetAt || careerResetAt <= Date.now()))) return;
     if (!search.q.trim() || !search.location.trim()) return;
     manualRequest.current?.abort();
     const controller = new AbortController();
@@ -240,18 +434,45 @@ export default function StudentDashboardClient() {
     setManualQuery(search.q);
     setManualLocation(search.location);
     setManualEmploymentType(search.employmentType);
-    setManualJobs([]);
+    setManualDatePosted(search.date_posted);
+    setRecentOpen(false);
+    if (!append) {
+      setManualJobs([]);
+      setManualCursor(null);
+      setJobDetails(null); setDetailsJobId(null);
+      setDetailsLoading(false);
+      setDetailsError("");
+      detailsRequest.current?.abort();
+    }
     setManualError("");
+    setManualFailedPage(false);
     setManualSearched(true);
     setManualLoading(true);
     try {
-      const params = new URLSearchParams(search);
+      const params = new URLSearchParams({ ...search, ...(append ? { cursor: manualCursor } : {}), ...(selectedStudentId ? { studentId: selectedStudentId } : {}) });
       const res = await fetch(`/api/careers/search?${params}`, { signal: controller.signal });
       const data = await res.json();
-      if (!res.ok || !data.success) throw new Error(data.warning || data.message || "Carian tidak dapat dimuatkan.");
-      if (!controller.signal.aborted) setManualJobs(data.jobs);
+      if (!res.ok || !data.success) {
+        const error = new Error(data.warning || data.message || "Carian tidak dapat dimuatkan.");
+        error.code = data.code;
+        throw error;
+      }
+      if (controller.signal.aborted) return;
+      if (data.resetAt <= Date.now()) throw new Error("Carian harian telah ditetapkan semula. Mulakan carian baharu.");
+      setManualJobs((previous) => append ? [...new Map([...previous, ...data.jobs].map((job) => [job.jobId, job])).values()] : data.jobs);
+      setManualCursor(data.cursor || null);
+      setLastManualSearch(search);
+      if (data.resetAt) setCareerResetAt(data.resetAt);
     } catch (error) {
-      if (!controller.signal.aborted) setManualError(error.message || "Sambungan gagal. Sila cuba lagi.");
+      if (!controller.signal.aborted) {
+        setManualError(error.message || "Sambungan gagal. Sila cuba lagi.");
+        setManualFailedPage(append);
+        if (["DAILY_RESET", "PROVIDER_INVALID_QUERY"].includes(error.code)) {
+          setManualCursor(null);
+          setManualFailedPage(false);
+          if (error.code === "DAILY_RESET") setManualJobs([]);
+        }
+      }
     } finally {
       if (!controller.signal.aborted) setManualLoading(false);
     }
@@ -949,10 +1170,15 @@ export default function StudentDashboardClient() {
                     { id: "auto", label: "Cadangan Automatik", icon: "ph-sparkle" },
                     { id: "manual", label: "Carian Manual", icon: "ph-magnifying-glass" },
                     { id: "pathway", label: "Laluan Pembelajaran", icon: "ph-path" },
+                    ...(isRestrictedUser ? [{ id: "saved", label: "Disimpan", icon: "ph-bookmark-simple", count: savedJobs.length }] : []),
                   ]}
                   activeTab={careerView}
                   setActiveTab={setCareerView}
                 />
+
+                {saveMessage && <p role="status" className="mt-3 text-sm text-emerald-700">{saveMessage}</p>}
+                {saveError && <p role="alert" className="mt-3 text-sm text-red-700">{saveError}</p>}
+                {savedError && <div role="alert" className="mt-3 flex flex-wrap items-center gap-3 text-sm text-red-700"><p>{savedError}</p><button type="button" onClick={() => setSavedRetry((value) => value + 1)} className="px-3 py-2 rounded-xl bg-slate-100 text-slate-700 touch-target active:scale-95">Muat Semula Simpanan</button></div>}
 
                 {careerView === "auto" && (
                   <div className="space-y-4 animate-[fadeIn_0.3s_ease-out]">
@@ -969,16 +1195,49 @@ export default function StudentDashboardClient() {
 
                 {careerView === "manual" && (
                   <form onSubmit={handleManualSearch} className="mt-4 space-y-3 animate-[slideUp_0.3s_ease-out] anim-fill stagger-1">
-                    <div>
+                    <div onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget)) setRecentOpen(false); }}>
                       <label htmlFor="career-query" className="block text-sm font-semibold text-slate-700 mb-1">Kata kunci jawatan</label>
-                      <input id="career-query" value={manualQuery} onChange={(e) => setManualQuery(e.target.value)} required maxLength={150}
+                      <input id="career-query" value={manualQuery} onChange={(e) => { setManualQuery(e.target.value); setRecentIndex(-1); }} required maxLength={150}
+                        onFocus={loadRecentSearches} role="combobox" aria-expanded={recentOpen} aria-controls="career-recent-searches" aria-autocomplete="list"
+                        aria-activedescendant={recentOpen && recentIndex >= 0 ? `career-recent-${recentIndex}` : undefined}
+                        onKeyDown={(event) => {
+                          if (event.key === "Escape") setRecentOpen(false);
+                          if (recentOpen && visibleRecentSearches.length && ["ArrowDown", "ArrowUp"].includes(event.key)) {
+                            event.preventDefault();
+                            setRecentIndex((index) => event.key === "ArrowDown" ? (index + 1) % visibleRecentSearches.length : (index <= 0 ? visibleRecentSearches.length - 1 : index - 1));
+                          }
+                          if (event.key === "Enter" && recentOpen && recentIndex >= 0) {
+                            event.preventDefault();
+                            handleManualSearch(null, { q: visibleRecentSearches[recentIndex], location: manualLocation, employmentType: manualEmploymentType });
+                          }
+                        }}
                         placeholder="Contoh: Welder, IT Support" className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm focus:ring-2 focus:ring-blue-500" />
+                      {recentOpen && (
+                        <div className="mt-2 rounded-xl border border-slate-200 bg-white shadow-sm p-2 animate-[fadeIn_0.2s_ease-out]">
+                          <p className="px-2 py-1 text-xs font-semibold text-slate-500">Carian terkini jabatan anda hari ini</p>
+                          {historyLoading ? <SkeletonList rows={2} /> : historyError ? <p className="px-2 py-2 text-xs text-slate-500">{historyError}</p> : (
+                            <ul id="career-recent-searches" role="listbox" aria-label="Carian terkini jabatan">
+                              {visibleRecentSearches.map((keyword, index) => <li key={keyword} role="presentation"><button id={`career-recent-${index}`} type="button" role="option" aria-selected={recentIndex === index}
+                                onMouseDown={(event) => event.preventDefault()}
+                                onClick={() => handleManualSearch(null, { q: keyword, location: manualLocation, employmentType: manualEmploymentType })}
+                                className={`w-full text-left px-3 py-2 rounded-lg text-sm touch-target active:scale-95 ${recentIndex === index ? "bg-blue-50 text-blue-700" : "hover:bg-slate-50 text-slate-700"}`}><i className="ph ph-clock-counter-clockwise mr-2" aria-hidden="true"></i>{keyword}</button></li>)}
+                            </ul>
+                          )}
+                          {!historyLoading && !historyError && !visibleRecentSearches.length && <p className="px-2 py-2 text-xs text-slate-500">Tiada carian terkini yang sepadan.</p>}
+                        </div>
+                      )}
                     </div>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                       <div>
                         <label htmlFor="career-location" className="block text-sm font-semibold text-slate-700 mb-1">Lokasi di Malaysia</label>
                         <input id="career-location" value={manualLocation} onChange={(e) => setManualLocation(e.target.value)} required maxLength={100}
                           placeholder="Malaysia atau Terengganu" className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm focus:ring-2 focus:ring-blue-500" />
+                      </div>
+                      <div>
+                        <label htmlFor="career-date-posted" className="block text-sm font-semibold text-slate-700 mb-1">Tarikh iklan</label>
+                        <select id="career-date-posted" value={manualDatePosted} onChange={(event) => setManualDatePosted(event.target.value)} className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm focus:ring-2 focus:ring-blue-500">
+                          <option value="all">Semua tarikh</option><option value="today">Hari ini</option><option value="3days">3 hari lepas</option><option value="week">Minggu ini</option><option value="month">Bulan ini</option>
+                        </select>
                       </div>
                       <div>
                         <label htmlFor="career-employment" className="block text-sm font-semibold text-slate-700 mb-1">Jenis pekerjaan</label>
@@ -1040,23 +1299,29 @@ export default function StudentDashboardClient() {
                 )}
 
                 {careerView !== "auto" && (
-                  <div className="mt-6" aria-live="polite" aria-busy={careerView === "manual" ? manualLoading : pathwayLoading}>
-                    {(careerView === "manual" ? manualLoading : pathwayLoading) ? <SkeletonList rows={3} /> : (
+                  <div className="mt-6" aria-live="polite" aria-busy={careerView === "saved" ? savedLoading : careerView === "manual" ? manualLoading : pathwayLoading}>
+                    {(careerView === "saved" ? savedLoading : careerView === "manual" ? manualLoading && !manualJobs.length : pathwayLoading) ? <SkeletonList rows={3} /> : (
                       <>
-                        {(careerView === "manual" ? manualError : pathwayError || pathwayWarning) ? (
+                        {(careerView === "manual" ? manualError : careerView === "pathway" ? pathwayError || pathwayWarning : "") ? (
                           <div role="alert" className="space-y-3">
                             <EmptyState icon="ph-warning-circle" title={careerView === "pathway" && pathway ? "Jawatan belum dapat dimuatkan" : "Permintaan tidak berjaya"} message={careerView === "manual" ? manualError : pathwayError || pathwayWarning} />
-                            <button type="button" onClick={() => careerView === "manual" ? handleManualSearch(null) : setPathwayRetry((value) => value + 1)} className="px-4 py-2 bg-blue-50 text-blue-700 rounded-xl touch-target active:scale-95">Cuba Lagi</button>
+                            <button type="button" onClick={() => careerView === "manual" ? handleManualSearch(null, null, manualFailedPage) : setPathwayRetry((value) => value + 1)} className="px-4 py-2 bg-blue-50 text-blue-700 rounded-xl touch-target active:scale-95">Cuba Lagi</button>
                           </div>
-                        ) : careerJobs.length ? (
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">{careerJobs.map((job, index) => <JobCard key={job.jobId} job={job} isDynamic delay={index * 60} />)}</div>
-                        ) : careerView === "manual" ? (
+                        ) : null}
+                        {careerJobs.length ? (
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">{careerJobs.map((job, index) => <JobCard key={job.jobId} job={job} isDynamic onDetails={toggleJobDetails}
+                            detailsOpen={detailsJobId === job.jobId} details={jobDetails} detailsLoading={detailsLoading} detailsError={detailsError} onRetryDetails={loadJobDetails}
+                            isSaved={savedJobs.some((saved) => saved.jobId === job.jobId)} onToggleSave={isRestrictedUser ? toggleSavedJob : undefined}
+                            saveDisabled={savedLoading || Boolean(savedError) || savingIds.includes(job.jobId)} delay={index * 60} />)}</div>
+                        ) : careerView === "saved" && !savedError ? <EmptyState icon="ph-bookmark-simple" title="Belum ada jawatan disimpan" message="Tekan Simpan pada jawatan yang anda ingin lihat semula." /> : careerView === "manual" && !manualError ? (
                           <EmptyState icon="ph-magnifying-glass" title={manualSearched ? "Tiada jawatan ditemui" : "Mulakan carian anda"} message={manualSearched ? "Cuba kata kunci lain atau luaskan lokasi carian." : "Masukkan jawatan, lokasi dan jenis pekerjaan untuk melihat peluang semasa."} />
-                        ) : pathway?.supported ? <EmptyState icon="ph-briefcase" title="Tiada jawatan ditemui" message="Teruskan pelan pembelajaran anda atau cuba salah satu carian dicadangkan." /> : null}
+                        ) : careerView === "pathway" && pathway?.supported && !pathwayError && !pathwayWarning ? <EmptyState icon="ph-briefcase" title="Tiada jawatan ditemui" message="Teruskan pelan pembelajaran anda atau cuba salah satu carian dicadangkan." /> : null}
+                        {careerView === "manual" && manualCursor && <button type="button" disabled={manualLoading} onClick={() => handleManualSearch(null, null, true)} className="mt-4 px-4 py-3 rounded-xl bg-blue-50 text-blue-700 disabled:opacity-50 touch-target active:scale-95">{manualLoading ? "Memuatkan…" : "Muat Lagi"}</button>}
                       </>
                     )}
                   </div>
                 )}
+
               </SectionCard>
             </div>
           )}

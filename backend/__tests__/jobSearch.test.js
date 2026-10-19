@@ -1,8 +1,11 @@
 import { jest } from "@jest/globals";
-import { searchJobsFromProvider } from "../services/jobSearch.service.js";
+import { searchJobsFromProvider, getJobDetailsFromProvider } from "../services/jobSearch.service.js";
+import { parseSearchParameters } from "../utils/careerCache.js";
 
 const originalKey = process.env.JSEARCH_API_KEY;
 let fetchMock;
+const job = { job_id: "J1", job_title: "Welder", employer_name: "Example", job_city: "Kerteh", job_apply_link: "https://example.com/apply", job_min_salary: 1200, job_salary_currency: "MYR", job_salary_period: "MONTH", job_publisher: "Example Jobs" };
+const params = parseSearchParameters({ q: "Welder", location: "Terengganu" }).params;
 beforeEach(() => {
   process.env.JSEARCH_API_KEY = "test-key";
   fetchMock = jest.spyOn(globalThis, "fetch");
@@ -13,49 +16,51 @@ afterEach(() => {
   else process.env.JSEARCH_API_KEY = originalKey;
 });
 
-it("uses the Malaysian provider filters and returns safe, deduplicated listings", async () => {
-  const job = { job_id: "job-1", job_title: "Welder", employer_name: "Example", job_city: "Kerteh", job_apply_link: "https://example.com/apply", job_min_salary: 1200, job_salary_currency: "MYR", job_salary_period: "MONTH", job_publisher: "Example Jobs" };
+it("sends exactly the effective parameters and returns safe unique cards plus cursor", async () => {
   fetchMock.mockResolvedValue({ ok: true, json: async () => ({ status: "OK", data: { jobs: [job, job, { ...job, job_id: "bad", job_apply_link: "javascript:alert(1)" }], cursor: "next-page" } }) });
-  const result = await searchJobsFromProvider({ q: "Welder", location: "Terengganu", employmentType: "INTERN" });
+  const result = await searchJobsFromProvider(params);
   const [url, options] = fetchMock.mock.calls[0];
   expect(url.origin + url.pathname).toBe("https://api.openwebninja.com/jsearch/search-v2");
-  expect(url.searchParams.get("query")).toBe("Welder in Terengganu");
-  expect(url.searchParams.get("employment_types")).toBe("INTERN");
-  expect(url.searchParams.get("country")).toBe("my");
+  expect(Object.fromEntries(url.searchParams)).toEqual(params);
   expect(options.headers).toEqual({ "x-api-key": "test-key" });
-  expect(result.jobs).toHaveLength(1);
-  expect(result.jobs[0]).toMatchObject({ title: "Welder", salary: "RM 1,200+ / MONTH", source: "Example Jobs", applyLink: "https://example.com/apply" });
+  expect(result).toMatchObject({ cursor: "next-page", jobs: [{ title: "Welder", salary: "RM 1,200+ / MONTH" }] });
 });
 
 it("does not call the provider without a key", async () => {
   delete process.env.JSEARCH_API_KEY;
-  expect((await searchJobsFromProvider({ q: "IT Support" })).warning).toBeTruthy();
+  await expect(searchJobsFromProvider(params)).rejects.toMatchObject({ code: "API_KEY_MISSING" });
   expect(fetchMock).not.toHaveBeenCalled();
 });
 
-it.each(["http", "network", "malformed"])("reports a %s failure without exposing provider details", async (failure) => {
+it.each(["http", "network", "malformed"])("reports %s failure without exposing provider details", async (failure) => {
   if (failure === "network") fetchMock.mockRejectedValue(new Error("secret provider information"));
   else fetchMock.mockResolvedValue({ ok: failure !== "http", json: async () => ({ error: "secret provider information" }) });
-  const result = await searchJobsFromProvider({ q: "Welder" });
-  expect(result.jobs).toEqual([]);
-  expect(result.warning).toBeTruthy();
-  expect(result.warning).not.toContain("secret");
+  await expect(searchJobsFromProvider(params)).rejects.toMatchObject({ status: 503 });
+  await expect(searchJobsFromProvider(params)).rejects.not.toThrow("secret");
 });
 
-it("returns at most six jobs and does not invent an allowance", async () => {
-  fetchMock.mockResolvedValue({ ok: true, json: async () => ({ status: "OK", data: { jobs: Array.from({ length: 9 }, (_, i) => ({ job_id: String(i), job_title: "Intern", job_apply_link: `https://example.com/${i}` })) } }) });
-  const { jobs } = await searchJobsFromProvider({ q: "Intern" });
-  expect(jobs).toHaveLength(6);
+it("keeps the whole page without inventing salary information", async () => {
+  fetchMock.mockResolvedValue({ ok: true, json: async () => ({ status: "OK", data: { jobs: Array.from({ length: 10 }, (_, i) => ({ job_id: String(i), job_title: "Intern", job_apply_link: `https://example.com/${i}` })) } }) });
+  const { jobs } = await searchJobsFromProvider(params);
+  expect(jobs).toHaveLength(10);
   expect(jobs[0].salary).toBe("Gaji / elaun tidak dinyatakan");
 });
 
-it("uses the provider's formatted salary and location", async () => {
-  fetchMock.mockResolvedValue({ ok: true, json: async () => ({ status: "OK", data: { jobs: [{ job_id: "formatted", job_title: "IT Support", job_apply_link: "https://example.com/apply", job_location: "Cyberjaya, Selangor", job_salary_string: "RM 1,000–1,500 a month" }] } }) });
-  const { jobs } = await searchJobsFromProvider({ q: "IT Support" });
-  expect(jobs[0]).toMatchObject({ location: "Cyberjaya, Selangor", salary: "RM 1,000–1,500 a month" });
+it("accepts empty pages and stops repeated provider cursors", async () => {
+  fetchMock.mockResolvedValue({ ok: true, json: async () => ({ status: "OK", data: { jobs: [], cursor: "same" } }) });
+  expect(await searchJobsFromProvider({ ...params, cursor: "same" })).toEqual({ jobs: [], cursor: null });
 });
 
-it("accepts a successful empty v2 response without a warning", async () => {
-  fetchMock.mockResolvedValue({ ok: true, json: async () => ({ status: "OK", data: { jobs: [], cursor: null } }) });
-  expect(await searchJobsFromProvider({ q: "Intern" })).toEqual({ jobs: [] });
+it("preserves Retry-After on 429 without automatic retries", async () => {
+  fetchMock.mockResolvedValue({ ok: false, status: 429, headers: new Headers({ "Retry-After": "45" }) });
+  await expect(searchJobsFromProvider(params)).rejects.toMatchObject({ status: 429, code: "PROVIDER_RATE_LIMIT", retryAfter: 45 });
+  expect(fetchMock).toHaveBeenCalledTimes(1);
+});
+
+it("retrieves normalized global details for one ID", async () => {
+  fetchMock.mockResolvedValue({ ok: true, json: async () => ({ status: "OK", data: [{ ...job, job_description: "Work with the welding team." }] }) });
+  expect((await getJobDetailsFromProvider("J1")).job.description).toBe("Work with the welding team.");
+  const [url] = fetchMock.mock.calls[0];
+  expect(url.pathname).toBe("/jsearch/job-details");
+  expect(Object.fromEntries(url.searchParams)).toEqual({ job_id: "J1", country: "my", language: "en" });
 });

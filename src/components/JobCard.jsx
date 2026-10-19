@@ -1,7 +1,7 @@
 import React from "react";
-import { Badge, formatMsDate } from "@/components/ui/dashboard-kit";
+import { Badge, SkeletonList, formatMsDate } from "@/components/ui/dashboard-kit";
 
-export default function JobCard({ job, isDynamic = false, delay = 0, onSearch }) {
+export default function JobCard({ job, isDynamic = false, delay = 0, onSearch, onDetails, detailsOpen = false, details, detailsLoading, detailsError, onRetryDetails, isSaved = false, onToggleSave, saveDisabled = false }) {
   if (isDynamic) {
     let applyLink = null;
     try {
@@ -13,7 +13,12 @@ export default function JobCard({ job, isDynamic = false, delay = 0, onSearch })
         style={{ animationDelay: `${delay}ms` }}>
         <div className="flex justify-between items-start gap-3 mb-3">
           <div className="p-2 bg-blue-500/20 text-blue-400 rounded-lg"><i className="ph-bold ph-briefcase text-xl" aria-hidden="true"></i></div>
-          <Badge tone="blue">{job.source || "JSearch"}</Badge>
+          <div className="flex items-center gap-2 flex-wrap justify-end">
+            <Badge tone="blue">{job.source || "JSearch"}</Badge>
+            {onToggleSave && <button type="button" aria-label={`${isSaved ? "Disimpan" : "Simpan"} ${job.title}`} aria-pressed={isSaved} disabled={saveDisabled} onClick={() => onToggleSave(job)} className="inline-flex items-center gap-1.5 px-3 py-2 text-sm font-semibold text-blue-200 rounded-xl border border-blue-400/40 hover:bg-blue-500/20 disabled:opacity-50 touch-target active:scale-95">
+              <i className={`${isSaved ? "ph-fill" : "ph"} ph-bookmark-simple`} aria-hidden="true"></i>{isSaved ? "Disimpan" : "Simpan"}
+            </button>}
+          </div>
         </div>
         <h3 className="font-bold text-white mb-1 break-words">{job.title}</h3>
         <p className="text-sm text-slate-300 mb-3">{job.company}</p>
@@ -22,6 +27,11 @@ export default function JobCard({ job, isDynamic = false, delay = 0, onSearch })
           <p><i className="ph ph-money mr-1" aria-hidden="true"></i>{job.salary}</p>
           {job.postedAt && <p>Disiarkan {formatMsDate(job.postedAt)}</p>}
         </div>
+        {onDetails && <button type="button" aria-expanded={detailsOpen} onClick={() => onDetails(job)} className="mb-3 py-2 text-sm text-blue-300 rounded-xl border border-blue-500/30 hover:bg-blue-500/10 touch-target active:scale-95">{detailsOpen ? "Tutup Butiran" : "Lihat Butiran"} <span className="sr-only">untuk {job.title}</span></button>}
+        {detailsOpen && <div className="mb-4 border-t border-slate-700 pt-4 animate-[fadeIn_0.3s_ease-out]" aria-live="polite" aria-busy={detailsLoading}>
+          <h4 className="text-sm font-semibold text-white mb-2">Deskripsi Jawatan</h4>
+          {detailsLoading ? <SkeletonList rows={3} /> : detailsError ? <div role="alert"><p className="text-sm text-amber-200">{detailsError}</p><button type="button" onClick={() => onRetryDetails(job)} className="mt-2 px-3 py-2 text-sm text-blue-200 rounded-xl border border-blue-500/30 touch-target active:scale-95">Cuba Lagi</button></div> : <p className="whitespace-pre-line break-words text-sm leading-relaxed text-slate-300">{details?.description || "Deskripsi tidak tersedia."}</p>}
+        </div>}
         {applyLink ? (
           <a href={applyLink} target="_blank" rel="noopener noreferrer" className="mt-auto block text-center py-3 text-sm font-semibold text-blue-300 bg-blue-500/10 rounded-xl hover:bg-blue-600 hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-400 transition-colors touch-target active:scale-95">
             Mohon Sekarang <i className="ph ph-arrow-square-out ml-1" aria-hidden="true"></i><span className="sr-only"> untuk {job.title} (tab baharu)</span>

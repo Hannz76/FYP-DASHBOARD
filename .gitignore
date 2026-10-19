@@ -1,5 +1,8 @@
 # Environment variables (Wajib ignore sebab ada JWT_SECRET dan password)
 .env
+.env.*
+!.env.example
+!.env.*.example
 
 # Node modules (Jangan push folder ni, sebab dia besar dan boleh recreate guna npm install)
 node_modules/
@@ -7,7 +10,27 @@ backend/node_modules/
 backend/uploads/
 # Build output (Boleh recreate guna npm run build)
 dist/
+.next/
+out/
+coverage/
+*.tsbuildinfo
+next-env.d.ts
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/
 mongodb_data/
+uploads/
+*.mdb
+*.accdb
+*.sqlite
+*.sqlite3
+*.pem
+*.key
+**/db/data_tvet*.json
+**/db/mdb_extracted/
+ml_training_data*.csv
 
 # Database files (File JSON ni biasanya besar sangat untuk GitHub)
 db/data_tvet_muktamad.json

@@ -1,9 +1,19 @@
-# .dockerignore
-node_modules
-dist
-ML
-.git
-.env
+# Frontend build context: exclude local configuration, data and generated files.
+**/node_modules
+**/.next
+**/dist
+**/coverage
+**/__pycache__
+**/.pytest_cache
+**/.venv
+**/venv
+**/.env
+**/.env.*
+**/uploads
+**/*.log
 *.tar
-db/sedut_mdb_tulen.py
-db/ekstrak_mdb.py
+.git
+.github
+backend
+ML
+db

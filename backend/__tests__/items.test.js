@@ -1,6 +1,8 @@
 import request from 'supertest';
 import app from '../server.js';
 
+process.env.JWT_SECRET = 'student-api-tests-only-signing-secret';
+
 describe('Student API Security', () => {
   it('should block access to /api/students without a token', async () => {
     const res = await request(app).get('/api/students');

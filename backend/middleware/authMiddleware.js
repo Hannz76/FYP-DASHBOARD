@@ -11,7 +11,8 @@ export const verifyToken = (req, res, next) => {
     }
 
     const token = authHeader.split(" ")[1];
-    const secret = process.env.JWT_SECRET || "";
+    const secret = process.env.JWT_SECRET;
+    if (!secret) return res.status(503).json({ message: "Konfigurasi pengesahan belum tersedia." });
 
     const decoded = jwt.verify(token, secret);
     req.user = decoded;

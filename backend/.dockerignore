@@ -1,0 +1,13 @@
+node_modules
+uploads
+.env
+.env.*
+*.log
+db/mdb_extracted
+db/data_tvet*.json
+db/ml_training_data*.csv
+**/*.mdb
+**/*.accdb
+**/__pycache__
+.git
+coverage

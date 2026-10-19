@@ -40,21 +40,6 @@ const studentSchema = new mongoose.Schema({
   ],
   // TAMBAHAN BAHARU:
   profileImage: String,
-  careerCache: {
-    recommendedJobs: [{
-      _id: false,
-      jobId: String,
-      title: String,
-      company: String,
-      location: String,
-      applyLink: String,
-      salary: String,
-      postedAt: String,
-      source: String,
-    }],
-    pathway: { type: Object, default: null },
-    fetchedAt: Date,
-  },
 });
 
 export default mongoose.model("Student", studentSchema);
