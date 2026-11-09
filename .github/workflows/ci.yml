@@ -1,0 +1,105 @@
+name: TVETMARA CI/CD Pipeline
+
+on:
+  push:
+    branches: [ "main", "master" ]
+  pull_request:
+    branches: [ "main", "master" ]
+
+jobs:
+  # --- 0. REPOSITORY HYGIENE (File-2 gate) ---
+  repository-hygiene:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check tracked files and environment templates
+        run: python3 scripts/check-repository.py
+
+  # --- 1. FRONTEND TEST & BUILD (Next.js 15 SSR) ---
+  frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Install Dependencies
+        run: npm install
+      - name: Run Frontend Tests (Vitest)
+        run: npm test
+      - name: Build Frontend (Next.js SSR)
+        env:
+          BACKEND_URL: http://backend:5000
+          JWT_SECRET: "ci-dummy-jwt-secret-for-build-only"
+          JWT_ISSUER: "tvetmara-backend"
+          JWT_AUDIENCE: "tvetmara-dashboard"
+        run: npm run build
+
+  # --- 2. BACKEND TEST (Express + Jest, Redis service for career cache) ---
+  backend:
+    runs-on: ubuntu-latest
+    services:
+      redis:
+        image: redis:7.4-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 2s
+          --health-retries 5
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Install Dependencies
+        run: npm install
+      - name: Run Backend Tests (Jest + Supertest)
+        env:
+          JWT_SECRET: "ci-dummy-jwt-secret-for-testing"
+          JWT_ISSUER: "tvetmara-backend"
+          JWT_AUDIENCE: "tvetmara-dashboard"
+          ML_API_SECRET: "ci-dummy-ml-secret"
+          ML_API_URL: "http://localhost:8000"
+          CAREER_TEST_REDIS_URL: redis://127.0.0.1:6379/15
+        run: npm test
+
+  # --- 3. ML SERVICE TEST (FastAPI + Pytest) ---
+  ml-service:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ML
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install mdbtools (ETL dependency)
+        run: sudo apt-get update && sudo apt-get install -y mdbtools
+      - name: Install Dependencies
+        run: pip install -r requirements.txt
+      - name: Run ML Tests (Pytest)
+        env:
+          ML_API_SECRET: ${{ secrets.ML_API_SECRET }}
+        run: pytest test_ml.py
+
+  # --- 4. DOCKER BUILD (only if all tests pass) ---
+  docker-build:
+    needs: [repository-hygiene, frontend, backend, ml-service]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build Frontend Image
+        run: docker build -f Containerfile.frontend -t tvet-frontend:latest .
+      - name: Build Backend Image
+        run: docker build -f backend/Containerfile.backend -t tvet-backend:latest ./backend
+      - name: Build ML Image
+        run: docker build -f ML/Containerfile -t tvet-ml-api:latest ./ML

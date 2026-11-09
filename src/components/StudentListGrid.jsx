@@ -1,0 +1,193 @@
+"use client";
+import React, { useState, useMemo } from "react";
+import { RiskBadge, getRiskMeta } from "./ui/dashboard-kit";
+
+const courseMap = {
+  ITW: "Diploma Kimpalan",
+  DFK: "Diploma Teknologi Komputer",
+  DGA: "Diploma Automotif",
+  SLR: "Sijil Lukisan Rekabentuk",
+  DCG: "Diploma Elektrik (Industri)",
+  SED: "Sijil Elektrik Domestik",
+  PPU: "Diploma Penyejukan & Udara",
+};
+
+export default function StudentListGrid({
+  students,
+  onViewProfile,
+  onAddStudent,
+  readOnly = false,
+}) {
+  const [search, setSearch] = useState("");
+  const [filter, setFilter] = useState("Semua");
+  const [riskFilter, setRiskFilter] = useState("Semua");
+
+  const filteredStudents = useMemo(() => {
+    return students.filter((s) => {
+      const matchSearch =
+        s.nama?.toLowerCase().includes(search.toLowerCase()) ||
+        s.id?.toLowerCase().includes(search.toLowerCase());
+      const matchFilter = filter === "Semua" || s.kursus === filter;
+      const matchRisk =
+        riskFilter === "Semua" ||
+        getRiskMeta(s.dropoutRisk).level === riskFilter;
+      return matchSearch && matchFilter && matchRisk;
+    });
+  }, [students, search, filter, riskFilter]);
+
+  const riskChips = [
+    { id: "Semua", label: "Semua Risiko", dot: "bg-slate-400" },
+    { id: "Tinggi", label: "Risiko Tinggi", dot: "bg-red-500" },
+    { id: "Sederhana", label: "Risiko Sederhana", dot: "bg-amber-500" },
+    { id: "Rendah", label: "Risiko Rendah", dot: "bg-emerald-500" },
+  ].map((r) => ({
+    ...r,
+    count:
+      r.id === "Semua"
+        ? students.length
+        : students.filter((s) => getRiskMeta(s.dropoutRisk).level === r.id).length,
+  }));
+
+  const filters = ["Semua", "ITW", "DFK", "DGA", "SLR", "DCG", "SED", "PPU"];
+
+  return (
+    <div className="space-y-6 animate-[fadeIn_0.3s_ease-in-out]">
+      {/* Header & Search */}
+      <div className="flex flex-col md:flex-row gap-4 justify-between items-start md:items-center animate-[slideUp_0.4s_ease-out]">
+        <div>
+          <h2 className="text-xl font-bold text-[#0A1628]">
+            Pengurusan Pelajar
+          </h2>
+          <p className="text-sm text-[#5A6A85]">
+            Menampilkan {filteredStudents.length} daripada {students.length}{" "}
+            pelajar
+          </p>
+        </div>
+        <div className="flex gap-2 w-full md:w-auto">
+          <div className="relative flex-1 md:w-64">
+            <i className="ph ph-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-[#5A6A85] text-lg"></i>
+            <input
+              type="text"
+              placeholder="Cari nama atau ID pelajar..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="w-full pl-10 pr-4 py-2.5 bg-white border border-[rgba(18,81,170,0.13)] rounded-lg text-sm text-[#0A1628] focus:outline-none focus:ring-2 focus:ring-[#1251AA] transition-shadow duration-200"
+            />
+          </div>
+          {!readOnly && onAddStudent && (
+            <button
+              onClick={onAddStudent}
+              className="bg-[#1251AA] text-white px-4 py-2.5 rounded-lg font-medium text-sm hover:bg-[#0C2461] hover:shadow-lg hover:shadow-[#1251AA]/20 transition-all duration-300 active:scale-95 flex items-center gap-2"
+            >
+              <i className="ph-bold ph-plus text-lg"></i> Tambah
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Filter Chips */}
+      <div className="flex gap-2 overflow-x-auto pb-2 animate-[slideUp_0.4s_ease-out_0.1s] anim-fill">
+        {filters.map((f) => (
+          <button
+            key={f}
+            onClick={() => setFilter(f)}
+            className={`px-4 py-1.5 rounded-lg text-sm font-medium whitespace-nowrap transition-all duration-200 active:scale-95 ${
+              filter === f
+                ? "bg-[#0C2461] text-white shadow-md shadow-[#0C2461]/20"
+                : "bg-white text-[#5A6A85] hover:bg-gray-50 border border-[rgba(18,81,170,0.13)]"
+            }`}
+          >
+            {f}
+          </button>
+        ))}
+      </div>
+
+      {/* Risk Category Chips */}
+      <div className="flex gap-2 overflow-x-auto pb-2 animate-[slideUp_0.4s_ease-out_0.15s] anim-fill">
+        {riskChips.map((r) => (
+          <button
+            key={r.id}
+            onClick={() => setRiskFilter(r.id)}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold whitespace-nowrap border transition-all duration-200 active:scale-95 ${
+              riskFilter === r.id
+                ? "bg-[#0C2461] text-white border-[#0C2461] shadow-md shadow-[#0C2461]/20"
+                : "bg-white text-[#5A6A85] border-[rgba(18,81,170,0.13)] hover:bg-gray-50"
+            }`}
+          >
+            <span className={`w-2 h-2 rounded-full ${r.dot}`}></span>
+            {r.label}
+            <span className={`px-1.5 rounded-full text-[10px] ${riskFilter === r.id ? "bg-white/20" : "bg-slate-100"}`}>
+              {r.count}
+            </span>
+          </button>
+        ))}
+      </div>
+
+      {/* Student Grid — staggered entrance */}
+      {filteredStudents.length === 0 ? (
+        <div className="bg-white border border-[rgba(18,81,170,0.13)] rounded-xl p-12 text-center animate-[scaleIn_0.3s_ease-out]">
+          <i className="ph ph-smiley-sad text-5xl text-[#5A6A85] mb-4"></i>
+          <h3 className="text-lg font-medium text-[#0A1628]">
+            Tiada pelajar dijumpai
+          </h3>
+          <p className="text-sm text-[#5A6A85] mt-1">
+            Cuba ubah kata kunci carian.
+          </p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+          {filteredStudents.map((student, index) => (
+            <div
+              key={student.id}
+              onClick={() => onViewProfile(student.id)}
+              className="relative bg-white border border-[rgba(18,81,170,0.13)] rounded-xl overflow-hidden cursor-pointer hover:shadow-lg hover:-translate-y-1 transition-all duration-300 animate-[slideUp_0.4s_ease-out] anim-fill"
+              style={{ animationDelay: `${Math.min(index * 60, 480)}ms` }}
+            >
+              <div className="h-20 bg-[#0C2461] flex justify-end items-start p-3 relative">
+                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-white/15 text-white backdrop-blur-sm border border-white/20 shadow-sm">
+                  <i className="ph-fill ph-graduation-cap text-sm"></i> Sem{" "}
+                  {student.semester || "1"}
+                </span>
+              </div>
+
+              <div className="absolute top-8 left-1/2 -translate-x-1/2 w-24 h-24 rounded-full bg-[#1251AA] text-white text-3xl font-bold flex items-center justify-center border-4 border-white shadow-md z-10 transition-transform duration-300 group-hover:scale-105 overflow-hidden">
+                {student.profileImage ? (
+                  <img src={student.profileImage} alt={student.nama} className="w-full h-full object-cover" />
+                ) : (
+                  student.nama?.charAt(0)
+                )}
+              </div>
+
+              <div className="pt-14 pb-5 px-5 flex flex-col items-center text-center">
+                <h3 className="font-bold text-[#0A1628] truncate w-full">
+                  {student.nama}
+                </h3>
+                <p className="text-xs text-[#5A6A85] mt-1">
+                  {courseMap[student.kursus] || student.kursus}
+                </p>
+                <div className="mt-2 flex justify-center">
+                  <RiskBadge risk={student.dropoutRisk} />
+                </div>
+
+                <div className="mt-3 w-full pt-3 border-t border-[rgba(18,81,170,0.13)] flex justify-between items-center text-xs">
+                  <div className="text-left">
+                    <p className="text-[#5A6A85]">ID</p>
+                    <p className="font-mono font-medium text-[#0A1628] mt-0.5">
+                      {student.id}
+                    </p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-[#5A6A85]">CGPA</p>
+                    <p className="font-bold text-[#1251AA] mt-0.5">
+                      {student.cgpa}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}

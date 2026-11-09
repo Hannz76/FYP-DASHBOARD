@@ -1,0 +1,96 @@
+version: "3.8"
+
+services:
+  mongodb:
+    image: docker.io/mongo:latest
+    container_name: tvet_mongodb
+    volumes:
+      - ./mongodb_data:/data/db:Z
+    restart: always
+    networks:
+      - tvet_net
+
+  redis:
+    image: docker.io/library/redis:7.4-alpine
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory", "128mb", "--maxmemory-policy", "noeviction"]
+    volumes:
+      - career_redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 2s
+      retries: 5
+    restart: always
+    networks:
+      - tvet_net
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Containerfile.backend
+    container_name: tvet_backend
+    ports:
+      - "5000:5000"
+    environment:
+      - NODE_ENV=production
+      - JWT_SECRET=${JWT_SECRET}
+      - JWT_ISSUER=${JWT_ISSUER:-tvetmara-backend}
+      - JWT_AUDIENCE=${JWT_AUDIENCE:-tvetmara-dashboard}
+      - MONGO_URI=${MONGO_URI:-mongodb://mongodb:27017/ikmb-dashboard}
+      - ML_API_URL=${ML_API_URL:-http://ml-api:8000}
+      - ML_API_SECRET=${ML_API_SECRET}
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - JSEARCH_API_KEY=${JSEARCH_API_KEY:-}
+      - REDIS_URL=redis://redis:6379
+      - TZ=Asia/Kuala_Lumpur
+      - CORS_ORIGIN=${CORS_ORIGIN:-http://localhost:8080,http://localhost:3000}
+    depends_on:
+      mongodb:
+        condition: service_started
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./backend/uploads:/app/uploads:Z
+    command: sh -c "sleep 5 && npm run start:prod"
+    restart: always
+    networks:
+      - tvet_net
+
+  ml-api:
+    build:
+      context: ./ML
+      dockerfile: Containerfile
+    container_name: tvet_ml_api
+    ports:
+      - "8000:8000"
+    environment:
+      - ML_API_SECRET=${ML_API_SECRET}
+    restart: always
+    networks:
+      - tvet_net
+
+  frontend:
+    build:
+      context: .
+      dockerfile: Containerfile.frontend
+    container_name: tvet_frontend
+    ports:
+      - "8080:3000"
+    environment:
+      - BACKEND_URL=http://backend:5000
+      - NODE_ENV=production
+      - JWT_SECRET=${JWT_SECRET}
+      - JWT_ISSUER=${JWT_ISSUER:-tvetmara-backend}
+      - JWT_AUDIENCE=${JWT_AUDIENCE:-tvetmara-dashboard}
+    depends_on:
+      - backend
+    restart: always
+    networks:
+      - tvet_net
+
+networks:
+  tvet_net:
+    driver: bridge
+
+volumes:
+  career_redis_data:
