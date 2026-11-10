@@ -16,6 +16,7 @@ import { Radar } from "react-chartjs-2";
 import Sidebar from "../Sidebar";
 import JobCard from "../JobCard";
 import CareerRecommendations from "../CareerRecommendations";
+import LearningRecommendations from "../LearningRecommendations";
 import { SectionCard, SkeletonList, EmptyState, Badge, PillTabs } from "@/components/ui/dashboard-kit";
 import MergedLaporanTab from "./MergedLaporanTab";
 import { calculateEmployability } from "@/lib/heuristics";
@@ -646,67 +647,6 @@ export default function StudentDashboardClient() {
       },
     ],
   };
-
-  const courseMappings = {
-    "PLO 1": {
-      title: "Professional Soft Skills: Communication",
-      desc: "Kursus ini dicadangkan kerana skor komunikasi anda di bawah par industri.",
-      bg: "bg-blue-600",
-      btn: "bg-blue-50 text-blue-600 hover:bg-blue-100",
-    },
-    "PLO 2": {
-      title: "Bengkel Pengaturcaraan Praktikal",
-      desc: "Untuk meningkatkan kompetensi penyelesaian masalah pengaturcaraan.",
-      bg: "bg-slate-900",
-      btn: "bg-slate-100 text-slate-700 hover:bg-slate-200",
-    },
-    "PLO 3": {
-      title: "Latihan Keselamatan Industri (OSH)",
-      desc: "Memperkukuhkan pemahaman tentang prosedur keselamatan tempat kerja.",
-      bg: "bg-purple-600",
-      btn: "bg-purple-50 text-purple-600 hover:bg-purple-100",
-    },
-    "PLO 4": {
-      title: "Kursus Pengurusan Masa & Projek",
-      desc: "Meningkatkan keupayaan merancang dan melaksanakan projek dengan cekap.",
-      bg: "bg-blue-600",
-      btn: "bg-blue-50 text-blue-600 hover:bg-blue-100",
-    },
-    "PLO 5": {
-      title: "Bengkel Inovasi & Reka Bentuk Produk",
-      desc: "Menambah kemahiran kreatif dalam merekabentuk penyelesaian baharu.",
-      bg: "bg-slate-900",
-      btn: "bg-slate-100 text-slate-700 hover:bg-slate-200",
-    },
-    "PLO 6": {
-      title: "Latihan Penyelesaian Kerosakan Motor/Elektrik",
-      desc: "Peningkatan kemahiran teknikal dalam diagnosis kerosakan.",
-      bg: "bg-purple-600",
-      btn: "bg-purple-50 text-purple-600 hover:bg-purple-100",
-    },
-    "PLO 7": {
-      title: "Kursus Keusahawanan & Pemasaran Digital",
-      desc: "Memperluas kemahiran perniagaan dan pemasaran kendiri.",
-      bg: "bg-blue-600",
-      btn: "bg-blue-50 text-blue-600 hover:bg-blue-100",
-    },
-    "PLO 8": {
-      title: "Bengkel Etika Kerja & Kepimpinan",
-      desc: "Membentuk sahsiah dan kemahiran memimpin pasukan.",
-      bg: "bg-slate-900",
-      btn: "bg-slate-100 text-slate-700 hover:bg-slate-200",
-    },
-    "PLO 9": {
-      title: "Latihan Integriti & Tanggungjawab Profesional",
-      desc: "Memantapkan nilai etika dan tanggungjawab di tempat kerja.",
-      bg: "bg-purple-600",
-      btn: "bg-purple-50 text-purple-600 hover:bg-purple-100",
-    },
-  };
-
-  const weakestPlo = skillGap.insight?.weakestSkill || "PLO 1";
-  const recommendedCourse =
-    courseMappings[weakestPlo] || courseMappings["PLO 1"];
 
   const handleProfileImageChange = async (e) => {
     if (e.target.files && e.target.files[0]) {
@@ -1420,73 +1360,7 @@ export default function StudentDashboardClient() {
 
           {/* TAB 4: COURSES */}
           {activeTab === "courses" && (
-            <div className="animate-[fadeIn_0.3s_ease-in-out]">
-              <header className="mb-8">
-                <h1 className="text-2xl font-bold text-slate-900">
-                  Kursus Cadangan (Personalized)
-                </h1>
-                <p className="text-slate-500">
-                  Senarai kursus untuk menutup jurang kemahiran anda berdasarkan
-                  PLO terlemah:{" "}
-                  <strong className="text-blue-600">{weakestPlo}</strong>.
-                </p>
-              </header>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
-                <div className="bg-white rounded-2xl border overflow-hidden shadow-sm hover:shadow-md transition flex flex-col h-full relative">
-                  <div
-                    className={`${recommendedCourse.bg} p-6 h-40 flex flex-col justify-end`}
-                  >
-                    <span className="absolute top-4 right-4 bg-white/20 backdrop-blur-sm text-white text-[10px] font-bold px-3 py-1 rounded-lg">
-                      Disyorkan AI
-                    </span>
-                    <h3 className="text-white font-bold text-xl leading-tight">
-                      {recommendedCourse.title}
-                    </h3>
-                  </div>
-                  <div className="p-6 flex-1 flex flex-col justify-between">
-                    <div>
-                      <p className="text-xs text-slate-500 font-semibold mb-3 flex items-center gap-2">
-                        <i className="ph-fill ph-clock text-lg"></i> 4 Jam •
-                        Online
-                      </p>
-                      <p className="text-sm text-slate-600 mb-6 leading-relaxed">
-                        {recommendedCourse.desc}
-                      </p>
-                    </div>
-                    <button
-                      className={`w-full py-3 font-bold rounded-xl text-sm transition-colors ${recommendedCourse.btn}`}
-                    >
-                      Mula Belajar
-                    </button>
-                  </div>
-                </div>
-                <div className="bg-white rounded-2xl border overflow-hidden shadow-sm hover:shadow-md transition flex flex-col h-full">
-                  <div className="bg-slate-900 p-6 h-40 relative flex flex-col justify-end">
-                    <span className="absolute top-4 right-4 bg-white/20 backdrop-blur-sm text-white text-[10px] font-bold px-3 py-1 rounded-lg">
-                      Advanced
-                    </span>
-                    <h3 className="text-white font-bold text-xl leading-tight">
-                      AWS Cloud Practitioner Essentials
-                    </h3>
-                  </div>
-                  <div className="p-6 flex-1 flex flex-col justify-between">
-                    <div>
-                      <p className="text-xs text-slate-500 font-semibold mb-3 flex items-center gap-2">
-                        <i className="ph-fill ph-chalkboard-teacher text-lg"></i>{" "}
-                        6 Jam • Bengkel IKMB
-                      </p>
-                      <p className="text-sm text-slate-600 mb-6 leading-relaxed">
-                        Untuk meningkatkan peluang anda mendapat kerja "Cloud
-                        Engineer" di industri teknologi.
-                      </p>
-                    </div>
-                    <button className="w-full py-3 bg-slate-100 text-slate-700 hover:bg-slate-200 font-bold rounded-xl text-sm transition-colors">
-                      Daftar Sesi
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </div>
+            <LearningRecommendations scope={careerScope} displayedDataset={activeDataset} />
           )}
         </div>
       </main>

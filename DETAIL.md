@@ -1,6 +1,6 @@
 # TVETMARA Besut dashboard: project structure and system reference
 
-Reviewed against the files available in this workspace on 8 November 2026.
+Initial project review: 8 November 2026. Learning-resource implementation and verification update: 10 November 2026.
 
 This project is a student monitoring and talent development dashboard for TVETMARA Besut, also called IKMB in the code. It brings academic records, attendance, learning outcomes, risk predictions, counseling, and career information into one application.
 
@@ -73,7 +73,8 @@ The project combines several methods:
 - A trained Random Forest predicts academic risk in Python.
 - Backend JavaScript rules normalize risk labels and provide prediction fallbacks.
 - Arithmetic formulas calculate employability, top-performer display scores, and career readiness.
-- Fixed dictionaries select example careers, certifications, and course suggestions.
+- Fixed dictionaries select some example careers and certifications.
+- A local learning catalog supplies current-course recommendations with explicit assessment and curriculum-review rules.
 - Gemini generates staff advice using a supplied student context.
 - JSearch supplies external job advertisements.
 
@@ -291,13 +292,13 @@ The student dashboard selects the current or latest processed dataset. It reques
 | `profile` | Kemaskini Sijil Saya | Photo and certificate uploads and certificate removal. Identity fields are disabled. |
 | `reports` | Laporan & Temujanji | Messages, letters, and accepted or scheduled referrals. |
 | `career` | Padanan Kerjaya (AI) | Fixed examples, provider search, pathways, descriptions, and saved jobs. |
-| `courses` | Kursus Cadangan | A fixed course selected by weakest PLO and a second fixed AWS course card. |
+| `courses` | Kursus Cadangan | Authenticated current-course learning modules, provider portals and reading resources, with reasons and real external links. |
 
 The student screen shows its active dataset but does not render a semester selector. Student tabs are not persisted in the URL.
 
 An unlinked demo user has `studentId: null`, so the backend returns no student records for it. It demonstrates authentication rather than a real profile.
 
-The course buttons **Mula Belajar** and **Daftar Sesi** have no handlers or links. The source has no course-enrollment or learning-platform integration.
+The learning tab opens real provider pages through **Mula Belajar**, **Baca e-buku** or **Buka portal pembelajaran**. Enrollment and learning stay on the provider site; the dashboard does not book sessions or claim completion. The old inactive **Daftar Sesi** control has been removed.
 
 ## 6. Authentication and permissions
 
@@ -701,6 +702,22 @@ Bookmarks require role `user`, a linked ID, and an existing student. Ownership c
 
 The UI updates after successful save or removal, prevents duplicate in-flight operations for a job, and preserves the old bookmark state on failure. Daily Redis reset does not remove bookmarks.
 
+### 10.7 Learning-resource recommendations
+
+Kursus Cadangan now loads `GET /api/courses/recommendations` through the existing Next.js proxy. Express authenticates the account, requires a linked student role and resolves that student's raw record using `getCurrentCareerSubject`. It uses the current processed dataset, or the latest processed dataset when none is marked current. If that dataset has no record for the student, access fails; an older personal snapshot cannot grant a former course's resources. The browser cannot supply a student ID, department, dataset or marks. Responses, including errors, use `Cache-Control: private, no-store`.
+
+The local catalog covers all seven course codes. DFK has computing foundations, ITW blueprint reading, SLR drafting and blueprint reading, DCG and SED electrical theory, DGA an automotive learning portal, and PPU an introductory HVAC module. General study and communication reading can serve any course. A shared public textbook is not another student's private search history. The service does not read career searches or contact providers, Redis or ML to construct its response.
+
+Only numeric PLO values greater than zero and at most 100 count as recorded. Zero, blanks, malformed values and out-of-range scores remain unknown. The service selects the two lowest recorded scores below 80, with PLO number breaking ties. Exactly 80 meets the target. Missing assessments produce a notice even when the other scores meet the target. No recorded deficits produce enrichment guidance; no assessments produce course foundations. The existing academic weakest-PLO selector can still pick zero, so learning recommendations deliberately do not reuse its result.
+
+A PLO-specific resource reason requires a reviewed mapping for the exact course, PLO and topic, with review evidence. No such institutional mapping was found, so the shipped alignment list is empty. Cards honestly say **Berdasarkan kursus anda**, rather than claiming that a generic PLO number establishes a subject weakness. Reviewed-map ordering is supported and tested with explicitly hypothetical fixtures. Risk labels, CGPA, certificates and other students' activity do not determine learning difficulty or ranking.
+
+Eligible entries must be active, have free-open or free-account access evidence, valid HTTPS destinations and a matching course or general audience. The guided list admits introductory resources and clearly labeled provider catalogs; the stored intermediate heat-pump reading is excluded. It deduplicates IDs and destinations, selects at most one item for each reviewed gap, keeps room for a course foundation and returns at most three learning items and three reading items. It shows fewer when coverage is limited.
+
+`LearningRecommendations.jsx` renders server reasons, provider, level, language, duration or unknown duration, access/account notices, prerequisites, credential notes and the checked date. It distinguishes loading, unavailable responses and empty coverage, supports retry and ignores delayed replies from a prior account/course scope. It labels the authoritative current dataset even when an academic historical snapshot is displayed. Actions open ordinary provider links in a new tab with safe link attributes; no fabricated AI badge, match percentage, workshop booking or certificate promise remains in this tab.
+
+Maintain resource metadata and publication status in `backend/data/learningCatalog.js`. Topic mappings belong in its `alignments` list only after curriculum review. Recheck free access and content as well as HTTP status. Source pages can change or block automated clients. The approved design, actual catalog substitutions, verification commands and observed link-check limitations are recorded in `docs/learning-resources-proposal.md`. The rebuilt local Docker containers contain this feature, as verified in section 16.3.
+
 ## 11. Counseling and student reports
 
 ### 11.1 Referral creation and visibility
@@ -842,7 +859,15 @@ Career responses set `Cache-Control: private, no-store`. This controls HTTP cach
 
 Codes include INVALID_SEARCH, INVALID_PREFERENCES, FORBIDDEN, INVALID_DEPARTMENT, MEMBERSHIP_UNAVAILABLE, API_KEY_MISSING, CACHE_UNAVAILABLE, PROVIDER_RATE_LIMIT, PROVIDER_INVALID_QUERY, SEARCH_IN_PROGRESS, CACHE_OWNER_LOST, and DAILY_RESET.
 
-### 13.6 Direct ML routes
+### 13.6 Learning resources
+
+| Method | Path | Access | Behavior |
+| --- | --- | --- | --- |
+| GET | `/api/courses/recommendations` | Current linked student | Current course/dataset, catalog version, mode, courses, e-books, recorded assessment gaps, notices and coverage reason. No query parameters accepted. |
+
+Unauthenticated requests receive 401. Staff, unlinked students and unavailable current membership receive 403; supplied overrides receive 400. Unexpected service failures receive 503 with a sanitized message. Personalized responses use private/no-store headers. Opening the provider link is separate from receiving this API response.
+
+### 13.7 Direct ML routes
 
 | Method | Path | Authentication | Behavior |
 | --- | --- | --- | --- |
@@ -877,6 +902,7 @@ The current API has no referral DELETE route, account registration route, genera
 | `TZ` | Backend | Compose uses Asia/Kuala_Lumpur. Cache deadline uses UTC arithmetic. |
 | `CAREER_TEST_REDIS_URL` | CI | Database 15 test URL. Available backend tests do not read it. |
 | `HISTORY_TEST_MONGO_URI`, `HISTORY_TEST_REDIS_URL` | Course-history verification script | Servers used for isolated synthetic records and uniquely prefixed history keys. |
+| `LEARNING_TEST_MONGO_URI` | Learning verification script | Disposable MongoDB server. The script creates and removes its own uniquely named test database. Not a runtime application setting. |
 
 Root `.env.example` is for root settings and Compose. Backend `.env.example` is for backend Node startup. Root Compose settings do not automatically create `backend/.env` for a process launched there.
 
@@ -911,6 +937,8 @@ The ML image installs mdbtools and Python requirements, copies artifacts, and st
 Backend startup waits for MongoDB service start and Redis PING health in Compose. It does not wait for ML readiness. Express starts its listener independently of its asynchronous MongoDB connection result.
 
 Production cookies use Secure. The Compose mapping itself provides HTTP, not TLS termination. Deployment needs a browser and HTTPS arrangement compatible with those flags. The localhost mapping does not establish secure-cookie behavior for a remote HTTP hostname.
+
+For a frontend/backend source update, the existing rebuild command is `docker compose up -d --build backend frontend` from the project root. It rebuilds those application images and recreates their containers while retaining existing database and upload storage. The learning-resource feature needs no new service, API key or environment setting. Its base recommendations work without Redis, ML or live provider calls, although Compose still starts the backend's existing database/cache dependencies.
 
 ### 14.4 Persistent storage and uploads
 
@@ -1007,9 +1035,13 @@ Training uses pandas sample variance, while inference uses NumPy population vari
 | src/__tests__/CourseHistory.test.jsx | Course response isolation, focus refresh, and delayed replies | Rendered component with fixture HTTP responses. |
 | backend/scripts/verify-course-history.mjs | Real HTTP, JWT, MongoDB, and Redis with two DFK students and one ITW student | Uses synthetic records and fixture provider jobs, not external listings. |
 | backend/scripts/verify-career-recommendations.mjs | Real personalized orders, shared result reuse, foreign-course refusal, index capacity and expiry | Isolated synthetic records and Redis prefixes, with no provider credits. |
+| backend/__tests__/courseRecommendations.test.js | All seven course audiences, raw assessment parsing, threshold, hypothetical reviewed-map ranking, exclusions, deduplication and empty coverage | Mocks the current-subject query; no official syllabus claim. |
+| src/__tests__/LearningRecommendations.test.jsx | Links, honest labels, missing metadata, errors, retry and delayed-response rejection | Rendered DOM and fixture HTTP responses; dashboard integration is covered in Careers.test.jsx. |
+| backend/scripts/verify-learning-recommendations.mjs | Real Express/JWT/MongoDB requests for seven courses, current membership, missing assessments and rejected overrides | Creates and removes an isolated synthetic database. No real student records or external learning calls. |
+| backend/scripts/check-learning-links.mjs | GET, final URL, status and page title for active catalog destinations | Automated access can be challenged; HTTP success does not establish price, enrollment or curriculum suitability. |
 | ML/test_ml.py | Three health, valid prediction, missing-field cases | Does not measure accuracy or test ETL and batch behavior. |
 
-The rendered frontend suite contains 30 cases and the backend Jest suite contains 32 cases at this update.
+The rendered frontend suite contains 40 cases across five files and the backend Jest suite contains 47 cases across five suites at the learning-resource update.
 
 `docs/career-cache.md` documents both isolated HTTP verification scripts. They use HISTORY_TEST_MONGO_URI and HISTORY_TEST_REDIS_URL. CI still sets CAREER_TEST_REDIS_URL, but the normal Jest suite does not use that variable or automatically run these scripts.
 
@@ -1031,11 +1063,33 @@ Despite its CI/CD title, the workflow does not push images or deploy a server.
 
 The repository script inspects tracked and new unignored Git candidates, private paths, generated files, files above ten MiB, credential patterns, and environment-template completeness. It withholds secret values and does not certify Git history.
 
-The supplied .git directory is empty, so Git-based checks cannot produce their normal repository result here.
+The original documentation review had no usable Git metadata. This checkout now has a real Git repository, so working-tree diffs and repository hygiene checks are available.
 
 This document was verified against source, configuration, complete parsed lockfiles, existing documents, test definitions, model metadata, and image assets. References were checked against the file inventory.
 
 The initial documentation-only change did not run application tests or builds. The personalized-recommendation update passed 30 frontend cases, 32 backend cases, isolated HTTP checks with two DFK students and one ITW student, and a Next production build. The user subsequently requested a local Docker rebuild. Frontend and backend rebuilt and restarted successfully; HTTP health and deployed code checks passed. No browser surface was available for actual browser verification. Model retraining and live provider calls were not part of this update. ML_TEST_RESULTS.md remains historical.
+
+The learning-resource checks were rerun before the local commit on 10 November 2026. All 40 frontend tests and 47 backend tests passed, along with isolated real HTTP/JWT/MongoDB checks and a Next production build. An independent source review found no actionable defects. The build reports three existing router-effect dependency warnings. No new suppression was added.
+
+HTTP checks cover all seven courses, zero, invalid and missing assessments, exact 80, current-course changes, old-only refusal, unauthenticated access and forged query overrides. Redis and ML were unreachable and provider fetches were blocked during the integration check. The synthetic database was dropped, and the temporary MongoDB container was removed afterward. No real student records were changed.
+
+The user subsequently rebuilt the local frontend and backend. Read-only checks confirmed that the running backend's server, route, catalog and recommendation service match the working-tree source byte for byte. The running frontend bundle contains the learning endpoint, and an anonymous request through its `/api/courses/recommendations` proxy returns 401. These checks establish the deployed artifacts and unauthenticated boundary. They do not establish a successful browser login or every rendered card. This documentation and commit pass did not restart either application stack.
+
+The final diff contains the learning catalog, service, route, UI integration, tests, verification scripts and related documentation. The repository hygiene scan and whitespace check passed. No unrelated file changes or credential findings were identified. Private environment files, runtime data, dependencies and build output remain excluded. The scan does not certify prior Git history or guarantee that every possible secret format is detectable.
+
+All ten stored resource destinations returned HTTP 200 with expected page titles across direct HTTP checks. The Node link checker separately encountered bot challenges on four BCcampus URLs; a second client retrieved those same pages successfully. This does not prove normal-browser behavior, registration, every exercise, downloadable files or continued pricing. No browser surface was available. Recheck before release and periodically afterward.
+
+The deterministic checks run from the project root are:
+
+```bash
+npm test
+npm --prefix backend test -- --runInBand
+npm run build
+python scripts/check-repository.py
+git diff --check
+```
+
+For the isolated HTTP check, set `LEARNING_TEST_MONGO_URI` to a disposable MongoDB server and run `node backend/scripts/verify-learning-recommendations.mjs`. `node backend/scripts/check-learning-links.mjs` is a separate external check. The pre-commit Node audit returned six successful destinations and four HTTP 403 challenge pages, so it exited with status 1. The secondary client retrieved all four challenged destinations successfully. Do not treat that audit as an unconditional pass or an enrollment test.
 
 ## 17. Limitations and troubleshooting
 
@@ -1052,6 +1106,9 @@ The initial documentation-only change did not run application tests or builds. T
 | Course labels | Dictionaries repeat across components, chat prompt, and pathways. Course naming already differs, especially SED. |
 | Risk displays | Stored normalization, live model, fallback, and training labels differ. |
 | Missing PLO | Zero can mean missing assessment but is numerically included in model features, institute averages, and readiness. |
+| Learning curriculum alignment | No approved per-course PLO/topic mapping is shipped. Recommendations use course foundations with honest explanations until that evidence is reviewed. |
+| Learning catalog coverage | The catalog is manually maintained and limited to ten records, including one intermediate item excluded from the guided list. Some programs have reading material without a course/module card. |
+| Learning source access | Four BCcampus destinations challenge the Node checker. Secondary HTTP access succeeded, but browser behavior, enrollment, complete downloads and future pricing are not certified. |
 | Risk badge | Shared getRiskMeta treats unknown values, including Pending, as low risk. |
 | Certificate response | Upload returns plain metadata without the stored embedded ID. The immediately appended card may need reload before deletion has an ID. |
 | Certificate synchronization | Embedded IDs can differ across snapshots. Pulling one ID does not guarantee removal of every copy with that file path. |
@@ -1087,19 +1144,19 @@ These observations document the current implementation. They are not code fixes 
 | Saved jobs remain after 08:00 | Expected. MongoDB bookmarks are independent of daily caches. |
 | Chat fails | Check backend key, configured provider model, outbound access, length, and rate limit. |
 | Duplicate student IDs | Compare ID and dataset together. Cross-dataset snapshots are expected. |
-| Git hygiene fails immediately | Real Git metadata is required and absent in this workspace. |
+| Git hygiene fails immediately | Run in the actual Git checkout; this workspace now has Git metadata. |
 
 ## 18. Reading scope and maintenance
 
 ### 18.1 Scope of this review
 
-The original review and subsequent career and Docker updates covered 113 available project files outside MongoDB runtime storage and environment-owned metadata. Source, tests, configuration, hidden project settings, existing Markdown, manifests, and assets were inspected. Both lockfiles were parsed in full. SVGs were parsed as XML. Both JPEG logos were viewed. The binary model files and recognizable metadata were inspected without loading or executing pickle objects.
+The original review and subsequent career, Docker and learning implementation updates covered 122 available project files outside MongoDB runtime storage and environment-owned metadata. Source, tests, configuration, hidden project settings, existing Markdown, manifests, and assets were inspected. Both lockfiles were parsed in full. SVGs were parsed as XML. Both JPEG logos were viewed. The binary model files and recognizable metadata were inspected without loading or executing pickle objects.
 
-Private .env values were not copied here. Upload directories were empty. Original MDBs, extracted CSVs, training CSV, installed dependencies, and generated builds were absent.
+Private .env values were not copied here. Upload directories were empty. Original MDBs, extracted CSVs and training CSV were absent from the initial source inventory. Installed dependencies and generated build output are excluded from that inventory; both were available during learning-feature verification.
 
 MongoDB's WiredTiger data directory is runtime storage, not source. Its journal, _tmp, and diagnostic.data directories were permission-restricted. Their contents were not read. No claim is made that every restricted database file or all live student records were inspected.
 
-The empty .git directory prevented a repository-history or Git-diff review. Deployment state, external API availability, and fresh model accuracy were not inferred from source inspection.
+The initial empty .git directory prevented a repository-history or Git-diff review at that time. The learning update used the current Git working tree. Deployment state, external API availability and fresh model accuracy are not inferred from source inspection.
 
 ### 18.2 Ownership of future changes
 
@@ -1110,6 +1167,7 @@ The empty .git directory prevented a repository-history or Git-diff review. Depl
 | Risk | ML API, trainers, label scripts, item model, frontend heuristics. |
 | Counseling | Both report schemas and routers, modals, counselor dashboard, calendar, merged inbox. |
 | Careers | Careers and saved-job routes, both services and utilities, SavedJob schema, student component, JobCard. |
+| Learning resources | Local catalog, course recommendation service and route, current-subject helper, learning component and verification scripts. |
 | Deployment | Manifests, lockfiles, Containerfiles, Compose, examples, Next config, and CI. |
 
 The following command lists project paths while excluding generated and runtime directories:
@@ -1137,7 +1195,7 @@ PY
 
 ## 19. Complete file-by-file reference
 
-The following reference includes every file in the 113-file reviewed inventory. Paths identify files available during this review, including private settings by name only. Descriptions explain purpose and connections rather than repeating file names.
+The following reference includes every file in the 122-file reviewed inventory. Paths identify files available during this review, including private settings by name only. Descriptions explain purpose and connections rather than repeating file names.
 
 ### 19.1 Root configuration, documents, and repository tools
 
@@ -1156,6 +1214,7 @@ The following reference includes every file in the 113-file reviewed inventory. 
 | `diagnostics.js` | mongosh script for counts, duplicate IDs, course grouping, whitespace IDs, import ledger, and sample records. Uses db, print, and printjson globals, so it is not a normal Node CLI. |
 | `docs/career-cache.md` | Focused Redis career-cache architecture, setup, request contract, and the isolated three-student HTTP verification command. |
 | `docs/career-ranking-proposal.md` | Approved architecture checkpoint with available evidence, ranked alternatives, role-first examples, boundaries and implementation contract. |
+| `docs/learning-resources-proposal.md` | Research and architecture for free course and reading recommendations. Records official sources, access limits, PLO uncertainty, the approved design, implemented scope, actual verification and maintenance commands. |
 | `jsconfig.json` | Defines the @/* alias as ./src/*. The Vitest alias mirrors it. No TypeScript compiler project is defined. |
 | `logo-tvetmara.jpg` | Root TVETMARA Besut logo image. A separate JPEG copy in public is the one referenced by the browser UI. |
 | `middleware.js` | Next page access guard using jose verification of the HttpOnly JWT. Redirects by role and mcp claim. Excludes API routes from its matcher; Express remains responsible for API access. |
@@ -1202,6 +1261,7 @@ The following reference includes every file in the 113-file reviewed inventory. 
 | `src/components/ReportFormModal.jsx` | Counseling referral composer with fetched counselor list, date, priority, reason, and optional PDF or image preview. Posts multipart to reports and closes after success. Its effect depends on an unstable preview clear function. |
 | `src/components/Sidebar.jsx` | Shared navigation, active-tab buttons, logo, user role, photo or initials, and logout callback. Supports a mobile slide, backdrop, Escape handling, and scroll lock. |
 | `src/components/StudentDetailModal.jsx` | Read-only appointment or report detail. Resolves kind and item props, displays student facts, notes or report text, previews report PDF, and provides file links. Several accepted action callback props are not used. |
+| `src/components/LearningRecommendations.jsx` | Current-record learning cards, provider links and metadata, loading/error/empty states, retry and stale-response protection. |
 | `src/components/StudentListGrid.jsx` | Name and ID search, course chips, risk chips and counts, and responsive student cards. Calls supplied profile and add callbacks. Its readOnly flag controls the add action. |
 | `src/components/StudentModal.jsx` | Controlled add or edit form supplied by the staff parent. Fields include ID, name, CGPA, attendance, certification, course, and status. ID is disabled on edit. Does not assign a dataset. |
 | `src/components/auth/ChangePasswordForm.jsx` | Current password, new password, and confirmation inputs with live policy indicators. Uses changePasswordAction and displays backend errors. Shows symbols as optional advice. |
@@ -1222,7 +1282,8 @@ The following reference includes every file in the 113-file reviewed inventory. 
 | --- | --- |
 | `src/__tests__/CourseHistory.test.jsx` | Four rendered-component cases for matching course history, foreign-course rejection, window-focus refresh, and late replies. |
 | `src/__tests__/CareerRecommendations.test.jsx` | Rendered automatic-view checks for ordering, own choices, late replies, course mismatches, unavailable states, focus and expiry. |
-| `src/__tests__/Careers.test.jsx` | Thirteen browser behavior tests with mocked identity, charts, and fetch. Covers queries, pathways, unavailable provider states, history, paging, descriptions, bookmark reload and retry, expiry, and unsafe application URLs. |
+| `src/__tests__/Careers.test.jsx` | Fourteen rendered-component behavior tests with mocked identity, charts, and fetch, including the real learning tab. Covers queries, pathways, unavailable provider states, history, paging, descriptions, bookmark reload and retry, expiry, and unsafe application URLs. |
+| `src/__tests__/LearningRecommendations.test.jsx` | Nine rendered learning-component cases for metadata, actions, scopes, errors, empty coverage and retry. |
 | `src/__tests__/Login.test.jsx` | One login rendering smoke test using Testing Library. Mocks navigation, script loading, and login action rather than testing authentication end to end. |
 
 ### 19.6 Backend runtime and maintenance
@@ -1236,6 +1297,8 @@ The following reference includes every file in the 113-file reviewed inventory. 
 | `backend/auth.model.js` | Password policy, sanitized users, login hashing and lockout, JWT creation, own password change, admin temporary passwords, student identity proof, and scoped recovery tokens bound to password-change state. |
 | `backend/babel.config.json` | Uses preset-env targeted at current Node and preserves ES modules for the backend test environment. |
 | `backend/careers.js` | Mounts authenticated search, history, details, pathway, and saved routes. Resolves authorized department from database or staff scope, sets no-store headers, rate-limits provider-related requests, and translates CareerError. |
+| `backend/courses.js` | Authenticated student-only learning endpoint, rejected query overrides, private response headers and sanitized failure responses. |
+| `backend/data/learningCatalog.js` | Ten public resource records, seven-course audiences, access/license metadata and an empty reviewed curriculum-alignment registry. Nine introductory/portal resources are eligible for the guided list. |
 | `backend/item.model.js` | MongoDB student operations and normalized API shape. Resolves datasets, calculates display risk, requests ML with fallback, builds skill-gap metrics and insight, and updates or deletes snapshots by student ID. |
 | `backend/items.js` | Student and data router mounted under /api. Owns upload parsers, CRUD HTTP handlers, semester ledger, executeEtlAndSync, MDB actions, manual prediction, Gemini helpers, history sanitization, and chat streaming. |
 | `backend/middleware/authMiddleware.js` | Verifies bearer signature, algorithm and claims, rejects reset tokens, reloads password state, and applies forced-change gate. Exports admin, staff, and matching-owner-or-staff checks. |
@@ -1249,6 +1312,7 @@ The following reference includes every file in the 113-file reviewed inventory. 
 | `backend/server.js` | Express assembly and boot. Loads dotenv, enforces JWT secret outside tests, configures Helmet and CORS, creates and serves upload directories, mounts routers and Swagger, connects MongoDB, recovers stuck imports, and exports app for tests. |
 | `backend/services/careerCache.service.js` | Lazy Redis client plus atomic Lua claims, publication, history changes, failure sharing, cooldown, and absolute daily expiry. Exports injectable createCareerCache and shared careerCache. |
 | `backend/services/careerRecommendations.service.js` | One current-student recommendation operation owning preference validation, coherent deduplication, role-first ordering, unknown requirements and explanation output. |
+| `backend/services/courseRecommendation.service.js` | Current-student assessment parsing, reviewed-map/course/general ordering, safe eligibility, deduplication and honest learning explanations. No runtime provider, Redis or ML calls. |
 | `backend/services/jobSearch.service.js` | Provider HTTP adapter with x-api-key, ten-second timeout, bounded Retry-After interpretation, error mapping, complete-page normalization, cursor handling, and job description lookup. |
 | `backend/studentReports.js` | Student message and PDF router. Validates required summary, parses PLO JSON, derives report type, applies role filters and owner or author checks, marks reads, and deletes reports and eligible attachments. |
 | `backend/sync-student-assets.js` | Database-writing asset repair script. Selects first nonempty values in ascending ID order and writes across snapshots in batches of 1,000 operations. Does not merge conflicting certificate arrays. |
@@ -1284,6 +1348,9 @@ The following reference includes every file in the 113-file reviewed inventory. 
 | `backend/scripts/verify-career-recommendations.mjs` | Isolated real HTTP, JWT, MongoDB and Redis proof of personal orders, same-course reuse, cross-course refusal, current membership, index bounds and expiry. |
 | `backend/__tests__/careerRecommendations.test.js` | Public-service behaviour fixtures covering personal order, strict-place fail versus unknown, dates, deduplication, legacy exclusion and invalid choices. |
 | `backend/__tests__/studentSnapshot.test.js` | Shared-selector regressions for current, pinned, fallback and absent datasets, plus strict career membership and normalization. |
+| `backend/__tests__/courseRecommendations.test.js` | Fifteen service cases covering all courses, raw assessment states, exact threshold, reviewed mapping fixtures, exclusions, duplicate/empty behavior and membership failures. |
+| `backend/scripts/verify-learning-recommendations.mjs` | Isolated real HTTP/JWT/MongoDB verification with synthetic records and external services unavailable; removes only its generated test database. |
+| `backend/scripts/check-learning-links.mjs` | Optional GET-based catalog link audit with timeouts and page titles. Not an enrollment or curriculum check. |
 | `backend/__tests__/items.test.js` | Two Supertest cases for missing and invalid bearer tokens on the student list. Does not connect a real MongoDB database. |
 
 ### 19.10 ML service, training, and artifacts

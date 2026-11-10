@@ -37,6 +37,10 @@ beforeEach(() => {
       ? { success: true, job: { ...job, description: "Join the welding team." }, resetAt: Date.now() + 60000 }
       : { success: true, jobs: [job], pathway, resetAt: Date.now() + 60000 }));
   vi.stubGlobal("fetch", vi.fn(async (url, options) => {
+    if (url === "/api/courses/recommendations") return response({ success: true, department: "ITW", dataset: "JJ2026", mode: "course-foundations", courses: [],
+      ebooks: [{ resource: { id: "blueprint", title: "Basic Blueprint Reading", provider: "Open Oregon", level: "introductory", languages: ["en"], durationMinutes: null, publication: { access: { kind: "free-open" } } },
+        reasons: ["Berdasarkan kursus Kimpalan anda."], notes: [], action: { label: "Baca e-buku", url: "https://openoregon.pressbooks.pub/blueprint/" } }],
+      assessment: { target: 80, gaps: [{ plo: 1, score: 60 }], unrecorded: [], recordedCount: 9 }, notices: [], emptyReason: null });
     if (url.startsWith("/api/careers/saved-jobs")) return savedFetch(url, options);
     if (url.startsWith("/api/careers/recommendations")) return careerResponse({ success: true, resetAt: Date.now() + 60000, mode: "course-only",
       roleChoices: [{ id: "welding", label: "Welding" }], placeChoices: [],
@@ -63,6 +67,17 @@ async function openCareers(view) {
 }
 
 describe("career tab", () => {
+  it("opens the real learning recommendations instead of the inactive AWS examples", async () => {
+    render(<StudentDashboardClient />);
+    await screen.findByText("Test insight");
+    fireEvent.click(screen.getByRole("button", { name: "Kursus Cadangan" }));
+    expect(await screen.findByRole("link", { name: /Baca e-buku untuk Basic Blueprint Reading/ })).toHaveAttribute("href", "https://openoregon.pressbooks.pub/blueprint/");
+    expect(screen.getByText("Rekod semasa: ITW · JJ2026.")).toBeInTheDocument();
+    expect(screen.queryByText("AWS Cloud Practitioner Essentials")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Daftar Sesi" })).not.toBeInTheDocument();
+    expect(fetch.mock.calls.filter(([url]) => url.startsWith("/api/courses/")).map(([url]) => url)).toEqual(["/api/courses/recommendations"]);
+  });
+
   it("retains the current student's recommendation choices across dashboard tabs", async () => {
     await openCareers();
     await screen.findByRole("region", { name: "Cadangan mengikut kursus" });
